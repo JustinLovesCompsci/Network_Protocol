@@ -29,7 +29,17 @@ struct reliable_state {
 rel_t *rel_list;
 
 
+struct sliding_window_send {
+	uint32_t last_packet_acked;
+	uint32_t last_packet_sent;
+	uint32_t last_packet_written;
+};
 
+struct sliding_window_receive {
+	uint32_t last_packet_read;
+	uint32_t last_packet_received;
+	uint32_t next_packet_expected;
+};
 
 
 /* Creates a new reliable protocol session, returns NULL on failure.
@@ -107,6 +117,7 @@ rel_read (rel_t *s)
 void
 rel_output (rel_t *r)
 {
+
 }
 
 void
