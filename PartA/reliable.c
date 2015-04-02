@@ -17,6 +17,23 @@
 #define SIZE_ACK_PACKET 8
 #define INIT_SEQ_NUM 1
 
+struct packet_list {
+	packet_t *next;
+	packet_t *prev; //TODO: may not be needed
+};
+
+struct sliding_window_send {
+	uint32_t last_packet_acked; //sequence number
+	typedef struct packet_list last_packet_sent;
+	uint32_t last_packet_written; //sequence number
+};
+
+struct sliding_window_receive {
+	uint32_t last_packet_read; //sequence number
+	typedef struct packet_list last_packet_received;
+	uint32_t next_packet_expected; //sequence number
+};
+
 struct reliable_state {
   rel_t *next;			/* Linked list for traversing all connections */
   rel_t **prev;
@@ -27,20 +44,6 @@ struct reliable_state {
 
 };
 rel_t *rel_list;
-
-
-struct sliding_window_send {
-	uint32_t last_packet_acked; //sequence number
-	packet_t last_packet_sent;
-	uint32_t last_packet_written; //sequence number
-};
-
-struct sliding_window_receive {
-	uint32_t last_packet_read; //sequence number
-	packet_t last_packet_received;
-	uint32_t next_packet_expected; //sequence number
-};
-
 
 /* Creates a new reliable protocol session, returns NULL on failure.
  * Exactly one of c and ss should be NULL.  (ss is NULL when called
