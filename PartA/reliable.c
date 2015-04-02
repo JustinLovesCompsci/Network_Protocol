@@ -20,11 +20,12 @@
 struct packet_list {
 	struct packet_list *next;
 	struct packet_list *prev; //TODO: may not be needed
+	packet_t packet;
 };
 
 struct sliding_window_send {
 	uint32_t last_packet_acked; //sequence number
-	struct packet_list last_packet_sent; //a doubly linked list of sent packets
+	struct packet_list *last_packet_sent; //a doubly linked list of sent packets
 	uint32_t last_packet_written; //sequence number
 };
 
@@ -129,6 +130,8 @@ rel_output (rel_t *r)
 {
 	conn_t *c = r->c;
 	size_t free_space = conn_bufspace(c);
+
+
 //	int result = conn_output(c, buffer, free_space);
 
 
