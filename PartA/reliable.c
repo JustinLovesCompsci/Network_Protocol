@@ -18,19 +18,19 @@
 #define INIT_SEQ_NUM 1
 
 struct packet_list {
-	packet_t *next;
-	packet_t *prev; //TODO: may not be needed
+	struct packet_list *next;
+	struct packet_list *prev; //TODO: may not be needed
 };
 
 struct sliding_window_send {
 	uint32_t last_packet_acked; //sequence number
-	typedef struct packet_list last_packet_sent;
+	struct packet_list last_packet_sent;
 	uint32_t last_packet_written; //sequence number
 };
 
 struct sliding_window_receive {
 	uint32_t last_packet_read; //sequence number
-	typedef struct packet_list last_packet_received;
+	struct packet_list last_packet_received;
 	uint32_t next_packet_expected; //sequence number
 };
 
@@ -131,10 +131,11 @@ rel_read (rel_t *s)
 void
 rel_output (rel_t *r)
 {
-//	conn_t *c = r->c;
-//	chunk_t *chunk = c->outq;
-//	size_t free_space = conn_bufspace(c);
+	conn_t *c = r->c;
+	size_t free_space = conn_bufspace(c);
 //	int result = conn_output(c, buffer, free_space);
+
+
 }
 
 void
