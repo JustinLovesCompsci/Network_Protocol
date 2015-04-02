@@ -103,15 +103,53 @@ rel_demux (const struct config_common *cc,
 {
 }
 
+/*method called by both server and client, responsible for:
+ * 	checking checksum for checking corrupted data (drop if corrupted)
+ * 	convert to host byte order
+ * 	check if ack only or
+ *
+*/
 void
-rel_recvpkt (rel_t *r, packet_t *pkt, size_t n)
+rel_recvpkt (rel_t *relState, packet_t *packet, size_t received_length)
 {
+  if (is_packet_corrupted (packet, received_length)) /* do not do anything if packet is corrupted */
+    return;
+
+  convert_packet_to_host_byte_order (packet);
+
+  if (packet->len == ACK_PACKET_SIZE)
+    process_received_ack_packet (relState, (struct ack_packet*) packet);
+  else
+    process_received_data_packet (relState, packet);
 }
 
 
 void
-rel_read (rel_t *s)
+rel_read (rel_t *relState)
 {
+  if (relState->clientState == WAITING_INPUT_DATA)
+  {
+    /* try to read from input and create a packet */
+    packet_t *packet = create_packet_from_input (relState);
+
+    /* in case there was data in the input and a packet was created, proceed to process, save
+       and send the packet */
+    if (packet != NULL)
+    {
+      int packetLength = packet->len;
+
+      /* change client state according to whether we are sending EOF packet or normal packet */
+      relState->clientState = (packetLength == EOF_PACKET_SIZE) ? WAITING_EOF_ACK : WAITING_ACK;
+
+      prepare_for_transmission (packet);
+      conn_sendpkt (relState->c, packet, (size_t) packetLength);
+
+      /* keep record of the last packet sent */
+      save_outgoing_data_packet (relState, packet, packetLength);
+
+      free (packet);
+    }
+  }
 }
 
 void
