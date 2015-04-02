@@ -106,16 +106,12 @@ rel_demux (const struct config_common *cc,
 {
 }
 
-void
-rel_recvpkt (rel_t *r, packet_t *pkt, size_t n)
-{
-}
-
-
-void
-rel_read (rel_t *s)
-{
-}
+/*method called by both server and client, responsible for:
+ * 	checking checksum for checking corrupted data (drop if corrupted)
+ * 	convert to host byte order
+ * 	check if ack only or
+ *
+*/
 
 /*
  *   To output data you have received in decoded UDP packets, call
