@@ -43,7 +43,11 @@ struct reliable_state {
 
   /* Add your own data fields below this */
   struct config_common config;
+  struct sliding_window_send sending_window;
+  struct sliding_window_receive receiving_window;
 };
+
+// global variables
 rel_t *rel_list;
 
 /* Creates a new reliable protocol session, returns NULL on failure.
