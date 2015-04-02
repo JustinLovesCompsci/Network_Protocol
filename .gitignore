@@ -7,7 +7,8 @@ PartA/Debug
 PartA/reliable
 PartB/Debug
 PartB/relayer/*
-.cproject
+*.cproject
+*.swp
 # make and build files
 *.lst
 *.o
