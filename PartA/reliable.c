@@ -24,13 +24,13 @@ struct packet_list {
 
 struct sliding_window_send {
 	uint32_t last_packet_acked; //sequence number
-	struct packet_list last_packet_sent;
+	struct packet_list last_packet_sent; //a doubly linked list of sent packets
 	uint32_t last_packet_written; //sequence number
 };
 
 struct sliding_window_receive {
 	uint32_t last_packet_read; //sequence number
-	struct packet_list last_packet_received;
+	struct packet_list last_packet_received; //a doubly linked list of received packets
 	uint32_t next_packet_expected; //sequence number
 };
 
