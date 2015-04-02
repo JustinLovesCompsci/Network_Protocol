@@ -12,10 +12,27 @@
 #include <sys/socket.h>
 #include <sys/uio.h>
 #include <netinet/in.h>
-
 #include "rlib.h"
 
+#define SIZE_ACK_PACKET 8
+#define INIT_SEQ_NUM 1
 
+struct packet_list {
+	struct packet_list *next;
+	struct packet_list *prev; //TODO: may not be needed
+};
+
+struct sliding_window_send {
+	uint32_t last_packet_acked; //sequence number
+	struct packet_list last_packet_sent;
+	uint32_t last_packet_written; //sequence number
+};
+
+struct sliding_window_receive {
+	uint32_t last_packet_read; //sequence number
+	struct packet_list last_packet_received;
+	uint32_t next_packet_expected; //sequence number
+};
 
 struct reliable_state {
   rel_t *next;			/* Linked list for traversing all connections */
@@ -27,20 +44,6 @@ struct reliable_state {
 
 };
 rel_t *rel_list;
-
-
-struct sliding_window_send {
-	uint32_t last_packet_acked;
-	uint32_t last_packet_sent;
-	uint32_t last_packet_written;
-};
-
-struct sliding_window_receive {
-	uint32_t last_packet_read;
-	uint32_t last_packet_received;
-	uint32_t next_packet_expected;
-};
-
 
 /* Creates a new reliable protocol session, returns NULL on failure.
  * Exactly one of c and ss should be NULL.  (ss is NULL when called
@@ -152,9 +155,24 @@ rel_read (rel_t *relState)
   }
 }
 
+/*
+ *   To output data you have received in decoded UDP packets, call
+     conn_output.  The function conn_bufspace tells you how much space
+     is available.  If you try to write more than this, conn_output
+     may return that it has accepted fewer bytes than you have asked
+     for.  You should flow control the sender by not acknowledging
+     packets if there is no buffer space available for conn_output.
+     The library calls rel_output when output has drained, at which
+     point you can send out more Acks to get more data from the remote
+     side.
+ */
 void
 rel_output (rel_t *r)
 {
+	conn_t *c = r->c;
+	size_t free_space = conn_bufspace(c);
+//	int result = conn_output(c, buffer, free_space);
+
 
 }
 

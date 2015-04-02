@@ -1,2 +1,18 @@
-*.DS_Store
-*.metadata/
+.cproject
+.dep/
+.project
+.settings/
+.metadata/
+PartA/Debug
+PartA/reliable
+PartB/Debug
+PartB/relayer/*
+*.cproject
+*.swp
+# make and build files
+*.lst
+*.o
+*.eep
+*.lss
+*.map
+*.sym
