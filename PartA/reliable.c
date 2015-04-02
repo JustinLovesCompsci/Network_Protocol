@@ -17,21 +17,21 @@
 #define SIZE_ACK_PACKET 8
 #define INIT_SEQ_NUM 1
 
-struct packet_list {
-	struct packet_list *next;
-	struct packet_list *prev; //TODO: may not be needed
+struct packet_node {
+	struct packet_node *next;
+	struct packet_node *prev; //TODO: may not be needed
 	packet_t packet;
 };
 
 struct sliding_window_send {
 	uint32_t last_packet_acked; //sequence number
-	struct packet_list *last_packet_sent; //a doubly linked list of sent packets
+	struct packet_node *last_packet_sent; //a doubly linked list of sent packets
 	uint32_t last_packet_written; //sequence number
 };
 
 struct sliding_window_receive {
 	uint32_t last_packet_read; //sequence number
-	struct packet_list *last_packet_received; //a doubly linked list of received packets
+	struct packet_node *last_packet_received; //a doubly linked list of received packets
 	uint32_t next_packet_expected; //sequence number
 };
 
