@@ -42,10 +42,9 @@ struct reliable_state {
   conn_t *c;			/* This is the connection object */
 
   /* Add your own data fields below this */
-
+  struct config_common config;
 };
 rel_t *rel_list;
-int window_size;
 
 /* Creates a new reliable protocol session, returns NULL on failure.
  * Exactly one of c and ss should be NULL.  (ss is NULL when called
