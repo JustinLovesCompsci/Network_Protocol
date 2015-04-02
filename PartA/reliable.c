@@ -31,7 +31,7 @@ struct sliding_window_send {
 
 struct sliding_window_receive {
 	uint32_t last_packet_read; //sequence number
-	struct packet_list last_packet_received; //a doubly linked list of received packets
+	struct packet_list *last_packet_received; //a doubly linked list of received packets
 	uint32_t next_packet_expected; //sequence number
 };
 
