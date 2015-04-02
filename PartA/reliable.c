@@ -20,7 +20,7 @@
 struct packet_node {
 	struct packet_node *next;
 	struct packet_node *prev; //TODO: may not be needed
-	packet_t packet;
+	packet_t * packet;
 };
 
 struct sliding_window_send {
@@ -43,12 +43,27 @@ struct reliable_state {
 
   /* Add your own data fields below this */
   struct config_common config;
-  struct sliding_window_send sending_window;
-  struct sliding_window_receive receiving_window;
+  struct sliding_window_send *sending_window;
+  struct sliding_window_receive *receiving_window;
 };
 
 // global variables
 rel_t *rel_list;
+
+// debug functions
+void print_rel(rel_t *);
+void print_sending_window(struct sliding_window_send*);
+void print_receiving_window(struct sliding_window_receive*);
+void print_config(struct config_common);
+
+// helper functions
+struct sliding_window_send * initialize_sending_window();
+struct sliding_window_receive * initialize_receiving_window();
+void destroy_sending_window(struct sliding_window_send*);
+void destory_receiving_window(struct sliding_window_receive*);
+
+
+
 
 /* Creates a new reliable protocol session, returns NULL on failure.
  * Exactly one of c and ss should be NULL.  (ss is NULL when called
@@ -79,8 +94,11 @@ rel_create (conn_t *c, const struct sockaddr_storage *ss,
   rel_list = r;
 
   /* Do any other initialization you need here */
+  r->config = *cc;
+  r->sending_window = initialize_sending_window();
+  r->receiving_window = initialize_receiving_window();
 
-
+  print_rel(r);
   return r;
 }
 
@@ -93,8 +111,11 @@ rel_destroy (rel_t *r)
   conn_destroy (r->c);
 
   /* Free any other allocated memory here */
-}
+  destroy_sending_window(r->sending_window);
+  destory_receiving_window(r->receiving_window);
 
+  free(r);
+}
 
 /* This function only gets called when the process is running as a
  * server and must handle connections from multiple clients.  You have
@@ -117,6 +138,16 @@ rel_demux (const struct config_common *cc,
  * 	check if ack only or
  *
 */
+void
+rel_recvpkt (rel_t *r, packet_t *pkt, size_t n)
+{
+}
+
+
+void
+rel_read (rel_t *s)
+{
+}
 
 /*
  *   To output data you have received in decoded UDP packets, call
@@ -146,4 +177,80 @@ rel_timer ()
 {
   /* Retransmit any packets that need to be retransmitted */
 
+}
+
+
+////////////////////////////////////////////////////////////////////////
+////////////////////////// Debug functions /////////////////////////////
+////////////////////////////////////////////////////////////////////////
+void print_rel(rel_t * rel) {
+	print_config(rel->config);
+	print_sending_window(rel->sending_window);
+	print_receiving_window(rel->receiving_window);
+}
+
+void print_config(struct config_common c) {
+	printf("CONFIG info: Window size: %d, timer: %d, timeout: %d, single_connection: %d\n", c.window, c.timer, c.timeout, c.single_connection);
+}
+
+void print_sending_window(struct sliding_window_send * window) {
+	printf("Printing sending window related info....\n");
+	printf("Last packet acked: %u, last packet written: %u\n", window->last_packet_acked, window->last_packet_written);
+	struct packet_node * pack = window->last_packet_sent;
+	while (pack) {
+		print_pkt(pack->packet, "packet", 1);
+		pack = pack->next;
+	}
+}
+
+void print_receiving_window(struct sliding_window_receive * window) {
+	printf("Printing receiving window related info....\n");
+	printf("Last packet read: %u, next packet expected: %u\n", window->last_packet_read, window->next_packet_expected);
+	struct packet_node * pack = window->last_packet_received;
+	while (pack) {
+		print_pkt(pack->packet, "packet", 1);
+		pack = pack->next;
+	}
+}
+
+
+////////////////////////////////////////////////////////////////////////
+////////////////////////// Helper functions /////////////////////////////
+////////////////////////////////////////////////////////////////////////
+struct sliding_window_send * initialize_sending_window() {
+	struct sliding_window_send * window = (struct sliding_window_send *) malloc(sizeof(struct sliding_window_send));
+	window->last_packet_acked = 1;
+	window->last_packet_written = 1;
+	window->last_packet_sent = NULL;
+	return window;
+}
+
+struct sliding_window_receive * initialize_receiving_window() {
+	struct sliding_window_receive * window = (struct sliding_window_receive *) malloc(sizeof(struct sliding_window_receive));
+	window->last_packet_read = 1;
+	window->next_packet_expected = 1;
+	window->last_packet_received = NULL;
+	return window;
+}
+
+void destroy_sending_window(struct sliding_window_send* window) {
+	struct packet_node * node = window->last_packet_sent;
+	while (node) {
+		struct packet_node * cur = node;
+		free(cur->packet);
+		node = node->next;
+		free(cur);
+	}
+	free(window);
+}
+
+void destory_receiving_window(struct sliding_window_receive* window) {
+	struct packet_node * node = window->last_packet_received;
+	while (node) {
+		struct packet_node * cur = node;
+		free(cur->packet);
+		node = node->next;
+		free(cur);
+	}
+	free(window);
 }
