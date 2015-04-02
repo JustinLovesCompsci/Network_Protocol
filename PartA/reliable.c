@@ -15,6 +15,9 @@
 
 #include "rlib.h"
 
+#define SIZE_ACK_PACKET 8
+#define INIT_SEQ_NUM 1
+
 
 
 struct reliable_state {
@@ -114,10 +117,24 @@ rel_read (rel_t *s)
 {
 }
 
+/*
+ *   To output data you have received in decoded UDP packets, call
+     conn_output.  The function conn_bufspace tells you how much space
+     is available.  If you try to write more than this, conn_output
+     may return that it has accepted fewer bytes than you have asked
+     for.  You should flow control the sender by not acknowledging
+     packets if there is no buffer space available for conn_output.
+     The library calls rel_output when output has drained, at which
+     point you can send out more Acks to get more data from the remote
+     side.
+ */
 void
 rel_output (rel_t *r)
 {
-
+//	conn_t *c = r->c;
+//	chunk_t *chunk = c->outq;
+//	size_t free_space = conn_bufspace(c);
+//	int result = conn_output(c, buffer, free_space);
 }
 
 void
