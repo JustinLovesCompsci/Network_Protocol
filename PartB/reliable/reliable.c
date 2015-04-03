@@ -15,14 +15,18 @@
 
 #include "rlib.h"
 
-
+// Define constants
+#define INT_MAX 4294967296 // 2^32
 
 struct reliable_state {
-
-  conn_t *c;			/* This is the connection object */
+	rel_t *next;			/* Linked list for traversing all connections */
+	rel_t **prev;
+	conn_t *c;			/* This is the connection object */
 
   /* Add your own data fields below this */
-
+	int ssthresh; // congestion window threshold
+	int cwnd;
+	int duplicated_ack_counter;
 };
 rel_t *rel_list;
 
@@ -55,7 +59,8 @@ rel_create (conn_t *c, const struct sockaddr_storage *ss,
   rel_list = r;
 
   /* Do any other initialization you need here */
-
+  r->ssthresh = INT_MAX;
+  r->cwnd = 1;
 
   return r;
 }
