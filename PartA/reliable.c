@@ -220,7 +220,11 @@ void rel_output(rel_t *r) {
 
 void rel_timer() {
 	/* Retransmit any packets that need to be retransmitted */
+	rel_t* cur_rel = rel_list;
+	while(cur_rel) {
 
+		cur_rel = rel_list->next;
+	}
 }
 
 ////////////////////////////////////////////////////////////////////////
