@@ -14,6 +14,7 @@
 #include "rlib.h"
 
 #define SIZE_ACK_PACKET 8
+#define SIZE_DATA_PCK_HEADER 12
 #define INIT_SEQ_NUM 1
 
 struct packet_node {
@@ -60,6 +61,8 @@ struct sliding_window_send * initialize_sending_window();
 struct sliding_window_receive * initialize_receiving_window();
 void destroy_sending_window(struct sliding_window_send*);
 void destory_receiving_window(struct sliding_window_receive*);
+void send_ack_pck(rel_t*, int);
+struct packet_node* get_first_unread_pck(rel_t*);
 
 /* Creates a new reliable protocol session, returns NULL on failure.
  * Exactly one of c and ss should be NULL.  (ss is NULL when called
@@ -137,17 +140,45 @@ void rel_read(rel_t *s) {
 
 /*
  * Call conn_bufspace to get buffer space. If not space available, no ack and no output
- * If there is space, output data and send acks
+ * If there is space, output data (partially or fully) and send acks
  */
 void rel_output(rel_t *r) {
 	conn_t *c = r->c;
 	size_t free_space = conn_bufspace(c);
-	struct packet_node* packet_ptr = r->receiving_window->last_packet_received;
-	uint32_t last_pck_read_seqno = r->receiving_window->last_packet_read;
+	if (free_space == 0) {
+		return; //no ack and no output if no space available
+	}
 
+	struct packet_node* packet_ptr = get_first_unread_pck(r);
+	int ackno_to_send = -1;
 
-//	int result = conn_output(c, buffer, free_space);
+	/* output data */
+	while (packet_ptr && free_space > 0) {
+		packet_t *current_pck = packet_ptr->packet;
+		int bytesWritten = conn_output(c, current_pck->data,
+				current_pck->len - SIZE_DATA_PCK_HEADER);
+		if (bytesWritten < 0) {
+			perror(
+					"Error generated from conn_output for output a whole packet");
+		}
 
+		if (free_space > current_pck->len - SIZE_DATA_PCK_HEADER) { /* enough space to output a whole packet */
+			assert(bytesWritten == current_pck->len - SIZE_DATA_PCK_HEADER);
+			ackno_to_send = current_pck->seqno + 1;
+			packet_ptr = packet_ptr->next;
+		} else { /* enough space to output only partial packet */
+			*current_pck->data += bytesWritten; //NOTE: check pointer increment correctness
+			current_pck->len = current_pck->len - bytesWritten;
+		}
+		free_space = conn_bufspace(c);
+	}
+
+	/* send ack */
+	if (ackno_to_send != -1) {
+		send_ack_pck(r, ackno_to_send);
+	}
+
+	//TODO: deal with EOF
 }
 
 void rel_timer() {
@@ -234,4 +265,27 @@ void destory_receiving_window(struct sliding_window_receive* window) {
 		free(cur);
 	}
 	free(window);
+}
+
+void send_ack_pck(rel_t* r, int ack_num) {
+	//TODO: make sure r is not null and ack_num is not sent before, update ackno recorded in r if needed
+	packet_t* ack_pck;
+	ack_pck->ackno = htonl(ack_num);
+	ack_pck->len = htons(SIZE_ACK_PACKET);
+	ack_pck->cksum = 0;
+	ack_pck->cksum = cksum(ack_pck, SIZE_ACK_PACKET);
+	conn_sendpkt(r->c, ack_pck, SIZE_ACK_PACKET);
+}
+
+struct packet_node* get_first_unread_pck(rel_t* r) {
+	struct packet_node* packet_ptr = r->receiving_window->last_packet_received;
+
+	while (packet_ptr) {
+		if (packet_ptr->packet->seqno
+				== r->receiving_window->last_packet_read + 1) {
+			break;
+		}
+		packet_ptr = packet_ptr->prev;
+	}
+	return packet_ptr;
 }
