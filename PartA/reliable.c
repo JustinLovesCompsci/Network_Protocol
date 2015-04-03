@@ -18,20 +18,20 @@
 
 struct packet_node {
 	struct packet_node *next;
-	struct packet_node *prev; //TODO: may not be needed
+	struct packet_node *prev;
 	packet_t * packet;
 };
 
 struct sliding_window_send {
-	uint32_t last_packet_acked; //sequence number
-	struct packet_node *last_packet_sent; //a doubly linked list of sent packets
-	uint32_t last_packet_written; //sequence number
+	uint32_t last_packet_acked; /* sequence number */
+	struct packet_node *last_packet_sent; /* a doubly linked list of sent packets */
+	uint32_t last_packet_written; /* sequence number */
 };
 
 struct sliding_window_receive {
-	uint32_t last_packet_read; //sequence number
-	struct packet_node *last_packet_received; //a doubly linked list of received packets
-	uint32_t next_packet_expected; //sequence number
+	uint32_t last_packet_read; /* sequence number */
+	struct packet_node *last_packet_received; /* a doubly linked list of received packets */
+	uint32_t next_packet_expected; /* sequence number */
 };
 
 struct reliable_state {
@@ -46,16 +46,16 @@ struct reliable_state {
 	struct sliding_window_receive *receiving_window;
 };
 
-// global variables
+/* global variables */
 rel_t *rel_list;
 
-// debug functions
+/* debug functions */
 void print_rel(rel_t *);
 void print_sending_window(struct sliding_window_send*);
 void print_receiving_window(struct sliding_window_receive*);
 void print_config(struct config_common);
 
-// helper functions
+/* helper functions */
 struct sliding_window_send * initialize_sending_window();
 struct sliding_window_receive * initialize_receiving_window();
 void destroy_sending_window(struct sliding_window_send*);
@@ -136,19 +136,15 @@ void rel_read(rel_t *s) {
 }
 
 /*
- *   To output data you have received in decoded UDP packets, call
- conn_output.  The function conn_bufspace tells you how much space
- is available.  If you try to write more than this, conn_output
- may return that it has accepted fewer bytes than you have asked
- for.  You should flow control the sender by not acknowledging
- packets if there is no buffer space available for conn_output.
- The library calls rel_output when output has drained, at which
- point you can send out more Acks to get more data from the remote
- side.
+ * Call conn_bufspace to get buffer space. If not space available, no ack and no output
+ * If there is space, output data and send acks
  */
 void rel_output(rel_t *r) {
 	conn_t *c = r->c;
 	size_t free_space = conn_bufspace(c);
+	struct packet_node* packet_ptr = r->receiving_window->last_packet_received;
+	uint32_t last_pck_read_seqno = r->receiving_window->last_packet_read;
+
 
 //	int result = conn_output(c, buffer, free_space);
 
