@@ -34,6 +34,7 @@ struct packet_node {
 	struct packet_node *next;
 	struct packet_node *prev;
 	packet_t * packet;
+	struct timeval time_sent;
 };
 
 struct sliding_window_send {
@@ -79,6 +80,7 @@ struct sliding_window_send * initialize_sending_window();
 struct sliding_window_receive * initialize_receiving_window();
 void destroy_sending_window(struct sliding_window_send*);
 void destory_receiving_window(struct sliding_window_receive*);
+void send_ack_pck(rel_t*, int);
 
 int checkCorruptedPacket(packet_t*, size_t);
 void convertToHostByteOrder(packet_t*);
@@ -86,7 +88,6 @@ void processAckPacket(rel_t*, packet_t*);
 void processPacket(rel_t*, packet_t*);
 uint16_t computeChecksum(packet_t*, int);
 
-void send_ack_pck(rel_t*, int);
 struct packet_node* get_first_unread_pck(rel_t*);
 struct packet_node* get_first_unacked_pck(rel_t*);
 packet_t *create_packet_from_conninput(rel_t *);
@@ -252,11 +253,21 @@ void rel_output(rel_t *r) {
 	//TODO: deal with EOF
 }
 
+/* Retransmit any packets that need to be retransmitted in sender */
 void rel_timer() {
-	/* Retransmit any packets that need to be retransmitted */
 	rel_t* cur_rel = rel_list;
-	while(cur_rel) {
+	while (cur_rel) {
+		struct packet_node* node = get_first_unacked_pck(cur_rel);
+		while (node) {
+			struct timeval* current_time = (struct timeval*) malloc(
+					sizeof(struct timeval));
+			if (gettimeofday(&(current_time), NULL) == -1) {
+				perror(
+						"Error generated from getting current time in rel_timer");
+			}
 
+			node = node->next;
+		}
 		cur_rel = rel_list->next;
 	}
 }
@@ -412,7 +423,7 @@ void process_data_packet(rel_t *r, packet_t *packet) {
 	/* if we receive a packet we have seen and processed before then just send an ack back
 	 regardless on which state the server is in */
 	if (packet->seqno < r->receiving_window->seqno_next_packet_expected)
-		create_and_send_ack_packet(r, packet->seqno + 1);
+		send_ack_pck(r, packet->seqno + 1);
 
 	/* if we have received the next in-order packet we were expecting and we are waiting
 	 for data packets process the packet */
@@ -422,7 +433,7 @@ void process_data_packet(rel_t *r, packet_t *packet) {
 		if (packet->len == SIZE_EOF_PACKET) {
 			conn_output(r->c, NULL, 0);
 			r->server_state = SERVER_FINISHED;
-			create_and_send_ack_packet(r, packet->seqno + 1);
+			send_ack_pck(r, packet->seqno + 1);
 
 			/* destroy the connection only if our client has finished transmitting */
 			if (r->client_state == CLIENT_FINISHED)
@@ -433,7 +444,7 @@ void process_data_packet(rel_t *r, packet_t *packet) {
 			save_incoming_data_packet(r, packet);
 
 			if (flush_payload_to_output(r)) {
-				create_and_send_ack_packet(r, packet->seqno + 1);
+				send_ack_pck(r, packet->seqno + 1);
 				r->receiving_window->seqno_next_packet_expected = packet->seqno
 						+ 1;
 			} else {
@@ -445,12 +456,13 @@ void process_data_packet(rel_t *r, packet_t *packet) {
 
 void send_ack_pck(rel_t* r, int ack_num) {
 	//TODO: make sure r is not null and ack_num is not sent before, update ackno recorded in r if needed
-	packet_t* ack_pck;
+	packet_t* ack_pck = (packet_t*) malloc(sizeof(packet_t));
 	ack_pck->ackno = htonl(ack_num);
 	ack_pck->len = htons(SIZE_ACK_PACKET);
 	ack_pck->cksum = 0;
 	ack_pck->cksum = cksum(ack_pck, SIZE_ACK_PACKET);
 	conn_sendpkt(r->c, ack_pck, SIZE_ACK_PACKET);
+	free(ack_pck);
 }
 
 struct packet_node* get_first_unread_pck(rel_t* r) {
@@ -516,7 +528,6 @@ packet_t *create_packet_from_conninput(rel_t *r) {
  */
 void prepareToTransmit(packet_t* packet) {
 	int packetLength = (int) (packet->len);
-
 	convertToNetworkByteOrder(packet);
 	packet->cksum = computeChecksum(packet, packetLength);
 }
@@ -536,15 +547,6 @@ uint16_t computeChecksum(packet_t *packet, int packetLength) {
 	return cksum((void*) packet, packetLength);
 }
 
-// used to create and send ack packet
-void create_and_send_ack_packet(rel_t *relState, uint32_t ackno) {
-	struct ack_packet *ackPacket = createAckPacket(ackno);
-	int packetLength = ackPacket->len;
-	prepareToTransmit((packet_t*) ackPacket);
-	conn_sendpkt(relState->c, (packet_t*) ackPacket, (size_t) packetLength);
-	free(ackPacket);
-}
-
 /*
  Client call only: Save a copy of the last packet if we need to retransmit.
  Note:
@@ -559,18 +561,8 @@ void save_outgoing_data_packet(rel_t *relState, packet_t *packet,
 	gettimeofday(&(relState->sending_window->lastTransmissionTime), NULL); // keep track of the time of transmission
 }
 
-struct ack_packet* createAckPacket(uint32_t ackNum) {
-	struct ack_packet *ackPacket;
-	ackPacket = malloc(sizeof(*ackPacket));
-
-	ackPacket->len = (uint16_t) SIZE_ACK_PACKET;
-	ackPacket->ackno = ackNum;
-
-	return ackPacket;
-}
 /**
  * Called by server side
  * flush the part of the last received
  */
 //void flushPayloadToOutput
-
