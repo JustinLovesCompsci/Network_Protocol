@@ -409,7 +409,7 @@ void process_data_packet(rel_t *r, packet_t *packet) {
 
 void send_ack_pck(rel_t* r, int ack_num) {
 	//TODO: make sure r is not null and ack_num is not sent before, update ackno recorded in r if needed
-	packet_t* ack_pck;
+	packet_t* ack_pck = (packet_t*) malloc(sizeof(packet_t));
 	ack_pck->ackno = htonl(ack_num);
 	ack_pck->len = htons(SIZE_ACK_PACKET);
 	ack_pck->cksum = 0;
