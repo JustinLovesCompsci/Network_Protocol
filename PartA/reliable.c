@@ -63,6 +63,7 @@ void destroy_sending_window(struct sliding_window_send*);
 void destory_receiving_window(struct sliding_window_receive*);
 void send_ack_pck(rel_t*, int);
 struct packet_node* get_first_unread_pck(rel_t*);
+struct packet_node* get_first_unacked_pck(rel_t*);
 
 /* Creates a new reliable protocol session, returns NULL on failure.
  * Exactly one of c and ss should be NULL.  (ss is NULL when called
@@ -283,6 +284,19 @@ struct packet_node* get_first_unread_pck(rel_t* r) {
 	while (packet_ptr) {
 		if (packet_ptr->packet->seqno
 				== r->receiving_window->last_packet_read + 1) {
+			break;
+		}
+		packet_ptr = packet_ptr->prev;
+	}
+	return packet_ptr;
+}
+
+struct packet_node* get_first_unacked_pck(rel_t* r) {
+	struct packet_node* packet_ptr = r->sending_window->last_packet_sent;
+
+	while (packet_ptr) {
+		if (packet_ptr->packet->seqno
+				== r->sending_window->last_packet_acked + 1) {
 			break;
 		}
 		packet_ptr = packet_ptr->prev;
