@@ -564,4 +564,9 @@ struct ack_packet* createAckPacket(uint32_t ackNum) {
 
 	return ackPacket;
 }
+/**
+ * Called by server side
+ * flush the part of the last received
+ */
+//void flushPayloadToOutput
 

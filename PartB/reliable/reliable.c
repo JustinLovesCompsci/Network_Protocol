@@ -17,6 +17,8 @@
 
 // Define constants
 #define INT_MAX 4294967296 // 2^32
+#define SIZE_ACK_PACKET 12 // size of an ack packet
+#define SIZE_EOF_PACKET 16
 
 struct reliable_state {
 	rel_t *next;			/* Linked list for traversing all connections */
@@ -26,11 +28,31 @@ struct reliable_state {
   /* Add your own data fields below this */
 	int ssthresh; // congestion window threshold
 	int cwnd;
+
+	/* For client/sender */
+	int expected_ack; // increment by 1 whenever receiver receives a correct ack
+
+	// for duplicated ack detection
+	int last_received_ack_no;
 	int duplicated_ack_counter;
+
+	/* For server/receiver */
+	int has_sent_EOF_packet;
 };
 rel_t *rel_list;
 
+/* Helper functions */
+packet_t * make_EOF_packet();
 
+////////////////////////////////////////////////////////////////////////
+////////////////////////// Helper functions /////////////////////////////
+////////////////////////////////////////////////////////////////////////
+int check_acks_validity(rel_t, packet_t); // check whether the received ack has the ack number that we are expecting
+
+int check_acks_validity(rel_t r, packet_t ack) {
+	assert(ack->len == SIZE_ACK_PACKET);
+	return ack->ackno == r->expected_ack;
+}
 
 
 
@@ -61,7 +83,11 @@ rel_create (conn_t *c, const struct sockaddr_storage *ss,
   /* Do any other initialization you need here */
   r->ssthresh = INT_MAX;
   r->cwnd = 1;
+  r->duplicated_ack_counter = 0;
+  r->expected_ack = 1;
+  r->has_sent_EOF_packet = 0;
 
+  // NOTE: if server/receiver, send EOF packet to client. If client, start slow start.
   return r;
 }
 
@@ -85,6 +111,16 @@ rel_demux (const struct config_common *cc,
 void
 rel_recvpkt (rel_t *r, packet_t *pkt, size_t n)
 {
+	// TODO: If receive normal ack, first check if it is a triply duplicated ack. If not,
+	//	1. increment cwnd (cwnd = cwnd + 1/cwnd)
+	// 	2. set last ack no. and set duplicated_ack_counter to be 1
+	//	3. call conn_output etc.; probably similar to part a
+	// If it is a triply duplicated acks,
+	//	1. ssthresh = cwnd/2
+	//	2. cwnd = ssthresh
+	//	3. do fast retransmission (need to determine which packets to retransmit)
+
+	// TODO: handle EOF and data packets
 }
 
 
@@ -97,6 +133,13 @@ rel_read (rel_t *s)
     //  return;
     //else
     //  send EOF to the sender
+
+	  if (s->has_sent_EOF_packet == 1) {
+		  return;
+	  } else {
+		  // TODO: send EOF to the sender
+		  s->has_sent_EOF_packet = 1;
+	  }
   }
   else //run in the sender mode
   {
@@ -114,4 +157,17 @@ rel_timer ()
 {
   /* Retransmit any packets that need to be retransmitted */
 
+	// Loop through the last_sent_packets to check if anyone of the packets
+	// 	a. have not received an ack yet, and
+	// 	b. has timed out
+	// If so, retransmit those packets and do multiplicative decrease:
+	//	ssthresh = cwnd/2; cwnd = 1;
+	// and perform slow start again
+}
+
+//////////////////////////////// Helper functions ///////////////////////////////
+packet_t * make_EOF_packet() {
+	packet_t* eof_packet = (packet_t *) malloc(sizeof(packet_t));
+	eof_packet->len = EOF_PACKET_SIZE;
+	eof_packet->
 }
