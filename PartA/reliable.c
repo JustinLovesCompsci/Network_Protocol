@@ -16,6 +16,7 @@
 #define SIZE_ACK_PACKET 8
 #define SIZE_EOF_PACKET 8
 #define SIZE_DATA_PCK_HEADER 12
+#define SIZE_MAX_PAYLOAD 500
 #define INIT_SEQ_NUM 1
 
 /*cient states*/
@@ -39,6 +40,8 @@ struct sliding_window_send {
 	uint32_t seqno_last_packet_acked; /* sequence number */
 	struct packet_node *last_packet_sent; /* a doubly linked list of sent packets */
 	uint32_t seqno_last_packet_sent; /* sequence number */
+
+	struct timeval lastTransmissionTime;
 };
 
 struct sliding_window_receive {
@@ -81,10 +84,19 @@ int checkCorruptedPacket(packet_t*, size_t);
 void convertToHostByteOrder(packet_t*);
 void processAckPacket(rel_t*, packet_t*);
 void processPacket(rel_t*, packet_t*);
+uint16_t computeChecksum(packet_t*, int);
 
 void send_ack_pck(rel_t*, int);
 struct packet_node* get_first_unread_pck(rel_t*);
 struct packet_node* get_first_unacked_pck(rel_t*);
+packet_t *create_packet_from_conninput(rel_t *);
+void prepareToTransmit(packet_t*);
+void convertToNetworkByteOrder(packet_t *);
+void create_and_send_ack_packet(rel_t *, uint32_t);
+
+/*helper for client */
+void save_outgoing_data_packet(rel_t *, packet_t *, int);
+struct ack_packet* createAckPacket(uint32_t);
 
 /* Creates a new reliable protocol session, returns NULL on failure.
  * Exactly one of c and ss should be NULL.  (ss is NULL when called
@@ -154,7 +166,6 @@ void rel_demux(const struct config_common *cc,
  * 	check if ack only or actual data included,
  * 		and pass the packet to corresponding handler
  *
-
  */
 void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
 	if (checkCorruptedPacket(pkt, n))
@@ -167,11 +178,34 @@ void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
 	} else {
 		processPacket(r, pkt); // data packet, server side
 	}
-
 }
 
 // function used by client (packet sending side)
-void rel_read(rel_t *s) {
+void rel_read(rel_t *relState) {
+	if (relState->client_state == WAITING_INPUT_DATA) {
+		/* try to read from input and create a packet */
+		packet_t *packet = create_packet_from_conninput(relState);
+
+		/* in case there was data in the input and a packet was created, proceed to process, save
+		 and send the packet */
+		if (packet != NULL) {
+			int packetLength = packet->len;
+
+			/* change client state according to whether we are sending EOF packet or normal packet */
+			relState->client_state =
+					(packetLength == SIZE_EOF_PACKET) ?
+					WAITING_EOF_ACK :
+														WAITING_ACK;
+
+			prepareToTransmit(packet);
+			conn_sendpkt(relState->c, packet, (size_t) packetLength);
+
+			/* keep record of the last packet sent */
+			save_outgoing_data_packet(relState, packet, packetLength);
+
+			free(packet);
+		}
+	}
 
 }
 
@@ -319,11 +353,10 @@ int checkCorruptedPacket(packet_t* packet, size_t pkt_length) {
 		return 1;
 
 	uint16_t wantedChecksum = packet->cksum;
-	uint16_t computedChecksum = compute_checksum(packet, packetLength);
+	uint16_t computedChecksum = computeChecksum(packet, packetLength);
 
 	return wantedChecksum != computedChecksum;
 }
-
 void convertToHostByteOrder(packet_t* packet) {
 	packet->len = ntohs(packet->len);
 	packet->ackno = ntohl(packet->ackno);
@@ -333,7 +366,6 @@ void convertToHostByteOrder(packet_t* packet) {
 	if (packet->len != SIZE_ACK_PACKET)
 		packet->seqno = ntohl(packet->seqno);
 }
-
 void processAckPacket(rel_t* r, packet_t* pkt) {
 	process_ack(r, (packet_t*) pkt);
 }
@@ -413,7 +445,7 @@ void process_data_packet(rel_t *r, packet_t *packet) {
 
 void send_ack_pck(rel_t* r, int ack_num) {
 	//TODO: make sure r is not null and ack_num is not sent before, update ackno recorded in r if needed
-	packet_t* ack_pck = (packet_t*) malloc(sizeof(packet_t));
+	packet_t* ack_pck;
 	ack_pck->ackno = htonl(ack_num);
 	ack_pck->len = htons(SIZE_ACK_PACKET);
 	ack_pck->cksum = 0;
@@ -446,3 +478,99 @@ struct packet_node* get_first_unacked_pck(rel_t* r) {
 	}
 	return packet_ptr;
 }
+
+/*
+ * Function called to: read from conn_input, create a packet from conn_input, and return it
+ * Note: if no data in conn_input: return null
+ * 		 if packet created: memory is allocated (to be freed later)
+ * 		 checkSum not computed here: to be computed right before packet is to be sent and converted to network order
+ */
+packet_t *create_packet_from_conninput(rel_t *r) {
+	packet_t *packet;
+	packet = xmalloc(sizeof(*packet));
+
+	//read one full packet's worth of data from input
+	int bytesRead = conn_input(r->c, packet->data, SIZE_MAX_PAYLOAD);
+
+	if (bytesRead == 0) // no inputt
+			{
+		free(packet);
+		return NULL;
+	}
+	// create a packet else if there's some data
+
+	// if we read an EOF create a zero byte payload, else we read normal bytes that should be declared in the len field
+	packet->len =
+			(bytesRead == -1) ?
+					(uint16_t) SIZE_DATA_PCK_HEADER :
+					(uint16_t) (SIZE_DATA_PCK_HEADER + bytesRead);
+	packet->ackno = (uint32_t) 1; // not piggybacking acks, don't ack any packets
+	packet->seqno = (uint32_t) (r->sending_window->seqno_last_packet_sent + 1);
+
+	return packet;
+
+}
+/* Prepare for UDP
+ * converts all necessary fields to network byte order
+ * computes and writes the checksum to the cksum field
+ */
+void prepareToTransmit(packet_t* packet) {
+	int packetLength = (int) (packet->len);
+
+	convertToNetworkByteOrder(packet);
+	packet->cksum = computeChecksum(packet, packetLength);
+}
+
+void convertToNetworkByteOrder(packet_t *packet) {
+// if data packet, convert its seqno as well
+	if (packet->len != SIZE_ACK_PACKET)
+		packet->seqno = htonl(packet->seqno);
+
+	packet->len = htons(packet->len);
+	packet->ackno = htonl(packet->ackno);
+}
+
+// need to supply pktLength as the field might be network byte order already
+uint16_t computeChecksum(packet_t *packet, int packetLength) {
+	memset(&(packet->cksum), 0, sizeof(packet->cksum));
+	return cksum((void*) packet, packetLength);
+}
+
+// used to create and send ack packet
+void create_and_send_ack_packet(rel_t *relState, uint32_t ackno) {
+	struct ack_packet *ackPacket = createAckPacket(ackno);
+	int packetLength = ackPacket->len;
+	prepareToTransmit((packet_t*) ackPacket);
+	conn_sendpkt(relState->c, (packet_t*) ackPacket, (size_t) packetLength);
+	free(ackPacket);
+}
+
+/*
+ Client call only: Save a copy of the last packet if we need to retransmit.
+ Note:
+ a pointer to a packet is necessary
+ fields are already in network byte order.
+ */
+void save_outgoing_data_packet(rel_t *relState, packet_t *packet,
+		int packetLength) {
+	memcpy(&(relState->sending_window->last_packet_sent), packet, packetLength);
+	relState->sending_window->seqno_last_packet_sent = (size_t) packetLength;
+	relState->sending_window->seqno_last_packet_sent += 1;
+	gettimeofday(&(relState->sending_window->lastTransmissionTime), NULL); // keep track of the time of transmission
+}
+
+struct ack_packet* createAckPacket(uint32_t ackNum) {
+	struct ack_packet *ackPacket;
+	ackPacket = malloc(sizeof(*ackPacket));
+
+	ackPacket->len = (uint16_t) SIZE_ACK_PACKET;
+	ackPacket->ackno = ackNum;
+
+	return ackPacket;
+}
+/**
+ * Called by server side
+ * flush the part of the last received
+ */
+//void flushPayloadToOutput
+
