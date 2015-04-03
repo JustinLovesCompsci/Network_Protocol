@@ -14,8 +14,20 @@
 #include "rlib.h"
 
 #define SIZE_ACK_PACKET 8
+#define SIZE_EOF_PACKET 8
 #define SIZE_DATA_PCK_HEADER 12
 #define INIT_SEQ_NUM 1
+
+/*cient states*/
+#define WAITING_INPUT_DATA 0
+#define WAITING_ACK 1
+#define WAITING_EOF_ACK 2
+#define CLIENT_FINISHED 3
+
+/*server states*/
+#define WAITING_DATA_PACKET 0
+#define WAITING_TO_FLUSH_DATA 1
+#define SERVER_FINISHED 2
 
 struct packet_node {
 	struct packet_node *next;
@@ -24,15 +36,15 @@ struct packet_node {
 };
 
 struct sliding_window_send {
-	uint32_t last_packet_acked; /* sequence number */
+	uint32_t seqno_last_packet_acked; /* sequence number */
 	struct packet_node *last_packet_sent; /* a doubly linked list of sent packets */
-	uint32_t last_packet_written; /* sequence number */
+	uint32_t seqno_last_packet_sent; /* sequence number */
 };
 
 struct sliding_window_receive {
-	uint32_t last_packet_read; /* sequence number */
+	uint32_t seqno_last_packet_read; /* sequence number */
 	struct packet_node *last_packet_received; /* a doubly linked list of received packets */
-	uint32_t next_packet_expected; /* sequence number */
+	uint32_t seqno_next_packet_expected; /* sequence number */
 };
 
 struct reliable_state {
@@ -40,6 +52,9 @@ struct reliable_state {
 	rel_t **prev;
 
 	conn_t *c; /* This is the connection object */
+
+	int client_state; /*cient state*/
+	int server_state; /*server state*/
 
 	/* Add your own data fields below this */
 	struct config_common config;
@@ -61,9 +76,16 @@ struct sliding_window_send * initialize_sending_window();
 struct sliding_window_receive * initialize_receiving_window();
 void destroy_sending_window(struct sliding_window_send*);
 void destory_receiving_window(struct sliding_window_receive*);
+
+int checkCorruptedPacket(packet_t*, size_t);
+void convertToHostByteOrder(packet_t*);
+void processAckPacket(rel_t*, packet_t*);
+void processPacket(rel_t*, packet_t*);
+
 void send_ack_pck(rel_t*, int);
 struct packet_node* get_first_unread_pck(rel_t*);
 struct packet_node* get_first_unacked_pck(rel_t*);
+
 
 /* Creates a new reliable protocol session, returns NULL on failure.
  * Exactly one of c and ss should be NULL.  (ss is NULL when called
@@ -130,13 +152,32 @@ void rel_demux(const struct config_common *cc,
 /*method called by both server and client, responsible for:
  * 	checking checksum for checking corrupted data (drop if corrupted)
  * 	convert to host byte order
- * 	check if ack only or
+ * 	check if ack only or actual data included,
+ * 		and pass the packet to corresponding handler
  *
- */
-void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
+
+*/
+void
+rel_recvpkt (rel_t *r, packet_t *pkt, size_t n)
+{
+	if (checkCorruptedPacket(pkt, n)) return; //check if corrupted
+
+	convertToHostByteOrder(pkt); // convert to host byte order
+
+	if (pkt->len == SIZE_ACK_PACKET){
+		processAckPacket(r, pkt); // ack packet only, client side
+	}else{
+		processPacket(r, pkt); // data packet, server side
+	}
+
 }
 
-void rel_read(rel_t *s) {
+// function used by client (packet sending side)
+void
+rel_read (rel_t *s)
+{
+
+
 }
 
 /*
@@ -205,7 +246,7 @@ void print_config(struct config_common c) {
 void print_sending_window(struct sliding_window_send * window) {
 	printf("Printing sending window related info....\n");
 	printf("Last packet acked: %u, last packet written: %u\n",
-			window->last_packet_acked, window->last_packet_written);
+			window->seqno_last_packet_acked, window->seqno_last_packet_sent);
 	struct packet_node * pack = window->last_packet_sent;
 	while (pack) {
 		print_pkt(pack->packet, "packet", 1);
@@ -216,7 +257,7 @@ void print_sending_window(struct sliding_window_send * window) {
 void print_receiving_window(struct sliding_window_receive * window) {
 	printf("Printing receiving window related info....\n");
 	printf("Last packet read: %u, next packet expected: %u\n",
-			window->last_packet_read, window->next_packet_expected);
+			window->seqno_last_packet_read, window->seqno_next_packet_expected);
 	struct packet_node * pack = window->last_packet_received;
 	while (pack) {
 		print_pkt(pack->packet, "packet", 1);
@@ -230,8 +271,8 @@ void print_receiving_window(struct sliding_window_receive * window) {
 struct sliding_window_send * initialize_sending_window() {
 	struct sliding_window_send * window = (struct sliding_window_send *) malloc(
 			sizeof(struct sliding_window_send));
-	window->last_packet_acked = 1;
-	window->last_packet_written = 1;
+	window->seqno_last_packet_acked = 1;
+	window->last_packet_sent = 1;
 	window->last_packet_sent = NULL;
 	return window;
 }
@@ -240,8 +281,8 @@ struct sliding_window_receive * initialize_receiving_window() {
 	struct sliding_window_receive * window =
 			(struct sliding_window_receive *) malloc(
 					sizeof(struct sliding_window_receive));
-	window->last_packet_read = 1;
-	window->next_packet_expected = 1;
+	window->seqno_last_packet_read = 1;
+	window->seqno_next_packet_expected = 1;
 	window->last_packet_received = NULL;
 	return window;
 }
@@ -268,6 +309,121 @@ void destory_receiving_window(struct sliding_window_receive* window) {
 	free(window);
 }
 
+/*
+ * computing its checksum and comparing to the checksum in the packet.
+ * Returns 1 if packet is corrupted and 0 if it is not.
+ */
+ int checkCorruptedPacket(packet_t* packet, size_t pkt_length){
+	 int packetLength = (int) ntohs (packet->len);
+	   /* If we received fewer bytes than the packet's size declare corruption. */
+	   if (pkt_length < (size_t)packetLength)
+	     return 1;
+
+	   uint16_t wantedChecksum = packet->cksum;
+	   uint16_t computedChecksum = compute_checksum (packet, packetLength);
+
+	   return wantedChecksum != computedChecksum;
+}
+void convertToHostByteOrder(packet_t* packet){
+	 packet->len = ntohs (packet->len);
+	  packet->ackno = ntohl (packet->ackno);
+
+	  /* if the packet is a data packet it additionally has a seqno that has
+	     to be converted to host byte order */
+	  if (packet->len != SIZE_ACK_PACKET)
+	    packet->seqno = ntohl (packet->seqno);
+}
+void processAckPacket(rel_t* r, packet_t* pkt){
+	process_ack (r, (packet_t*) pkt);
+}
+
+/* Server should process the data part of the packet
+ * client should process ack part of the packet. */
+void processPacket(rel_t* r, packet_t* pkt){
+
+	  /* Pass the packet to the server piece to process the data packet */
+	  process_data_packet (r, pkt);
+
+	  /* Pass the packet to the client piece to process the ackno field */
+	  process_ack (r, pkt);
+}
+
+/*
+ * processes received ack only packets which have passed the corruption check.
+ This functionality belongs to the client and server piece.
+ */
+void process_ack (rel_t *r, packet_t *packet)
+{
+  /* proceed only if we are waiting for an ack */
+  if (r->client_state == WAITING_ACK)
+  {
+    /* received ack for last normal packet sent, go back to waiting for input
+       and try to read */
+    if (packet->ackno == r->sending_window->seqno_last_packet_sent + 1)
+    {
+      r->client_state = WAITING_INPUT_DATA;
+      rel_read (r);
+    }
+  }
+  else if (r->client_state == WAITING_EOF_ACK)
+  {
+    /* received ack for EOF packet, enter declare client connection to be finished */
+    if (packet->ackno == r->sending_window->seqno_last_packet_sent + 1)
+    {
+      r->client_state = CLIENT_FINISHED;
+
+      /* destroy the connection only if the other side's client has finished transmitting */
+      if (r->server_state == SERVER_FINISHED)
+        rel_destroy (r);
+    }
+  }
+}
+
+/* This function processes a data packet.
+ * This is functionality of the server piece. */
+void
+process_data_packet (rel_t *r, packet_t *packet)
+{
+  /* if we receive a packet we have seen and processed before then just send an ack back
+     regardless on which state the server is in */
+  if (packet->seqno < r->receiving_window->seqno_next_packet_expected)
+    create_and_send_ack_packet (r, packet->seqno + 1);
+
+  /* if we have received the next in-order packet we were expecting and we are waiting
+     for data packets process the packet */
+  if ( (packet->seqno == r->receiving_window->seqno_next_packet_expected) && (r->server_state == WAITING_DATA_PACKET) )
+  {
+    /* if we received an EOF packet signal to conn_output and destroy the connection if appropriate */
+    if (packet->len == SIZE_EOF_PACKET)
+    {
+      conn_output (r->c, NULL, 0);
+      r->server_state = SERVER_FINISHED;
+      create_and_send_ack_packet (r, packet->seqno + 1);
+
+      /* destroy the connection only if our client has finished transmitting */
+      if (r->client_state == CLIENT_FINISHED)
+        rel_destroy (r);
+    }
+    /* we receive a non-EOF data packet, so try to flush it to conn_output */
+    else
+    {
+      save_incoming_data_packet (r, packet);
+
+      if (flush_payload_to_output (r))
+      {
+        create_and_send_ack_packet (r, packet->seqno + 1);
+        r->receiving_window->seqno_next_packet_expected = packet->seqno + 1;
+      }
+      else
+      {
+        r->server_state = WAITING_TO_FLUSH_DATA;
+      }
+    }
+  }
+}
+
+
+
 void send_ack_pck(rel_t* r, int ack_num) {
 	//TODO: make sure r is not null and ack_num is not sent before, update ackno recorded in r if needed
 	packet_t* ack_pck;
@@ -283,7 +439,7 @@ struct packet_node* get_first_unread_pck(rel_t* r) {
 
 	while (packet_ptr) {
 		if (packet_ptr->packet->seqno
-				== r->receiving_window->last_packet_read + 1) {
+				== r->receiving_window->seqno_last_packet_read + 1) {
 			break;
 		}
 		packet_ptr = packet_ptr->prev;
@@ -296,7 +452,7 @@ struct packet_node* get_first_unacked_pck(rel_t* r) {
 
 	while (packet_ptr) {
 		if (packet_ptr->packet->seqno
-				== r->sending_window->last_packet_acked + 1) {
+				== r->sending_window->seqno_last_packet_acked + 1) {
 			break;
 		}
 		packet_ptr = packet_ptr->prev;
