@@ -61,8 +61,10 @@ struct sliding_window_send * initialize_sending_window();
 struct sliding_window_receive * initialize_receiving_window();
 void destroy_sending_window(struct sliding_window_send*);
 void destory_receiving_window(struct sliding_window_receive*);
-
-
+int checkCorruptedPacket(packet_t* packet);
+int convertToHostByteOrder(packet_t* packet);
+int processAckPacket(rel_t* r, packet_t* pkt);
+int processPacket(rel_t* r, packet_t* pkt);
 
 
 /* Creates a new reliable protocol session, returns NULL on failure.
@@ -135,18 +137,30 @@ rel_demux (const struct config_common *cc,
 /*method called by both server and client, responsible for:
  * 	checking checksum for checking corrupted data (drop if corrupted)
  * 	convert to host byte order
- * 	check if ack only or
+ * 	check if ack only or actual data included,
+ * 		and pass the packet to corresponding handler
  *
 */
 void
 rel_recvpkt (rel_t *r, packet_t *pkt, size_t n)
 {
+	if (checkCorruptedPacket(pkt)) return; //check if corrupted
+
+	convertToHostByteOrder(pkt); // convert to host byte order
+
+	if (pkt->len == SIZE_ACK_PACKET){
+		processAckPacket(r, pkt); // ack packet only, client side
+	}else{
+		processPacket(r, pkt); // data packet, server side
+	}
+
 }
 
-
+// function used by client (packet sending side)
 void
 rel_read (rel_t *s)
 {
+
 }
 
 /*
@@ -254,3 +268,17 @@ void destory_receiving_window(struct sliding_window_receive* window) {
 	}
 	free(window);
 }
+
+int checkCorruptedPacket(packet_t* packet){
+
+}
+int convertToHostByteOrder(packet_t* packet){
+
+}
+int processAckPacket(rel_t* r, packet_t* pkt){
+
+}
+int processPacket(rel_t* r, packet_t* pkt){
+
+}
+
