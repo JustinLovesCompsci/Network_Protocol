@@ -17,6 +17,7 @@
 
 // Define constants
 #define INT_MAX 4294967296 // 2^32
+#define SIZE_ACK_PACKET 12 // size of an ack packet
 
 struct reliable_state {
 	rel_t *next;			/* Linked list for traversing all connections */
@@ -26,11 +27,25 @@ struct reliable_state {
   /* Add your own data fields below this */
 	int ssthresh; // congestion window threshold
 	int cwnd;
+
+	int expected_ack; // increment by 1 whenever receiver receives a correct ack
+
+	// for duplicated ack detection
+	int last_received_ack_no;
 	int duplicated_ack_counter;
 };
 rel_t *rel_list;
 
 
+////////////////////////////////////////////////////////////////////////
+////////////////////////// Helper functions /////////////////////////////
+////////////////////////////////////////////////////////////////////////
+int check_acks_validity(rel_t, packet_t); // check whether the received ack has the ack number that we are expecting
+
+int check_acks_validity(rel_t r, packet_t ack) {
+	assert(ack->len == SIZE_ACK_PACKET);
+	return ack->ackno == r->expected_ack;
+}
 
 
 
