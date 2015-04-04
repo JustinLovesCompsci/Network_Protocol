@@ -131,8 +131,9 @@ rel_create(conn_t *c, const struct sockaddr_storage *ss,
 	r->c = c;
 	r->next = rel_list;
 	r->prev = &rel_list;
-	if (rel_list)
+	if (rel_list) {
 		rel_list->prev = &r->next;
+	}
 	rel_list = r;
 
 	/* Do any other initialization you need here */
