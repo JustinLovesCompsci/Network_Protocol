@@ -276,7 +276,7 @@ void rel_output(rel_t *r) {
 }
 
 /**
- * Retransmit any packets that need to be retransmitted in sender
+ * Retransmit any packets that have not been acked and exceed timeout in sender
  * @author Justin (Zihao) Zhang
  */
 void rel_timer() {
@@ -301,11 +301,6 @@ void rel_timer() {
 		}
 		cur_rel = rel_list->next;
 	}
-}
-
-int isGreaterThan(struct timeval* time1, int millisec2) {
-	int millisec1 = time1->tv_sec * 1000 + time1->tv_usec / 1000;
-	return millisec1 > millisec2;
 }
 
 ////////////////////////////////////////////////////////////////////////
@@ -389,6 +384,11 @@ void destory_receiving_window(struct sliding_window_receive* window) {
 	free(window);
 }
 
+int isGreaterThan(struct timeval* time1, int millisec2) {
+	int millisec1 = time1->tv_sec * 1000 + time1->tv_usec / 1000;
+	return millisec1 > millisec2;
+}
+
 /*
  * computing its checksum and comparing to the checksum in the packet.
  * Returns 1 if packet is corrupted and 0 if it is not.
@@ -403,16 +403,6 @@ int isPacketCorrupted(packet_t* packet, size_t pkt_length) {
 	uint16_t expectedChecksum = packet->cksum;
 	uint16_t computedChecksum = computeChecksum(packet, packetLength);
 	return expectedChecksum != computedChecksum;
-}
-
-void convertToHostByteOrder(packet_t* packet) {
-	packet->len = ntohs(packet->len);
-	packet->ackno = ntohl(packet->ackno);
-
-	/* if the packet is a data packet it additionally has a seqno that has
-	 to be converted to host byte order */
-	if (packet->len != SIZE_ACK_PACKET)
-		packet->seqno = ntohl(packet->seqno);
 }
 
 void processAckPacket(rel_t* r, packet_t* pkt) {
@@ -493,7 +483,7 @@ void process_data_packet(rel_t *r, packet_t *packet) {
 }
 
 void send_ack_pck(rel_t* r, int ack_num) {
-	//TODO: make sure r is not null and ack_num is not sent before, update ackno recorded in r if needed
+	//TODO: make sure ack_num is not sent before
 	packet_t* ack_pck = (packet_t*) malloc(sizeof(packet_t));
 	ack_pck->ackno = ack_num;
 	ack_pck->len = SIZE_ACK_PACKET;
@@ -576,6 +566,14 @@ void convertToNetworkByteOrder(packet_t *packet) {
 	}
 	packet->len = htons(packet->len);
 	packet->ackno = htonl(packet->ackno);
+}
+
+void convertToHostByteOrder(packet_t* packet) {
+	if (packet->len != SIZE_ACK_PACKET) { /* if data packet, convert its seqno */
+		packet->seqno = ntohl(packet->seqno);
+	}
+	packet->len = ntohs(packet->len);
+	packet->ackno = ntohl(packet->ackno);
 }
 
 // need to supply pktLength as the field might be network byte order already
