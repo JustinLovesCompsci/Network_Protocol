@@ -36,7 +36,7 @@ struct packet_node {
 	struct packet_node *next;
 	struct packet_node *prev;
 	packet_t * packet;
-	struct timeval time_sent;
+	struct timeval* time_sent;
 };
 
 struct sliding_window_send {
@@ -84,6 +84,7 @@ struct sliding_window_receive * initialize_receiving_window();
 void destroy_sending_window(struct sliding_window_send*);
 void destory_receiving_window(struct sliding_window_receive*);
 void send_ack_pck(rel_t*, int);
+int isGreaterThan(struct timeval*, int);
 
 int isPacketCorrupted(packet_t*, size_t);
 void convertToHostByteOrder(packet_t*);
@@ -289,14 +290,22 @@ void rel_timer() {
 				perror(
 						"Error generated from getting current time in rel_timer");
 			}
-			/* TODO: subtract time_sent from current_time,
-			 * if difference is greater than timeout, retransmit data packet,
-			 * if not, do nothing */
 
+			struct timeval* diff = (struct timeval*) malloc(
+					sizeof(struct timeval));
+			timersub(current_time, node->time_sent, diff);
+			if (isGreaterThan(diff, cur_rel->config.timeout)) { /* Retransmit because exceeds timeout */
+				//TODO: retransmit current packet
+			}
 			node = node->next;
 		}
 		cur_rel = rel_list->next;
 	}
+}
+
+int isGreaterThan(struct timeval* time1, int millisec2) {
+	int millisec1 = time1->tv_sec * 1000 + time1->tv_usec / 1000;
+	return millisec1 > millisec2;
 }
 
 ////////////////////////////////////////////////////////////////////////
