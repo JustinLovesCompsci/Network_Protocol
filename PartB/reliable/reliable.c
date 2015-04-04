@@ -40,13 +40,27 @@ struct reliable_state {
 };
 rel_t *rel_list;
 
-/* Helper functions */
-packet_t * make_EOF_packet();
+/* Packet format
+ *
+ * struct packet {
+ * uint16_t cksum;
+ * uint16_t len;
+ * uint32_t ackno;
+ * uint32_t rwnd;
+ * uint32_t seqno; Only valid if length > 8
+ * char data[1000];
+ };
+ */
 
 ////////////////////////////////////////////////////////////////////////
 ////////////////////////// Helper functions /////////////////////////////
 ////////////////////////////////////////////////////////////////////////
 int check_acks_validity(rel_t*, packet_t*); // check whether the received ack has the ack number that we are expecting
+packet_t * create_EOF_packet();
+int check_acks_validity(rel_t, packet_t); // check whether the received ack has the ack number that we are expecting
+void convertToHostByteOrder(packet_t*);
+void convertToNetworkByteOrder(packet_t *);
+uint16_t computeChecksum(packet_t *, int);
 
 int check_acks_validity(rel_t* r, packet_t* ack) {
 	assert(ack->len == SIZE_ACK_PACKET);
@@ -121,8 +135,11 @@ void rel_read(rel_t *s) {
 		if (s->has_sent_EOF_packet == 1) {
 			return;
 		} else {
-			// TODO: send EOF to the sender
+			packet_t * eof_packet = make_eof_packet();
+			assert(sizeof(eof_packet) == SIZE_ACK_PACKET);
+			conn_sendpkt(s->c, eof_packet, (size_t) SIZE_ACK_PACKET);
 			s->has_sent_EOF_packet = 1;
+			free(eof_packet);
 		}
 	} else //run in the sender mode
 	{
@@ -145,8 +162,47 @@ void rel_timer() {
 }
 
 //////////////////////////////// Helper functions ///////////////////////////////
-packet_t * make_EOF_packet() {
+packet_t * create_EOF_packet() {
 	packet_t* eof_packet = (packet_t *) malloc(sizeof(packet_t));
-	eof_packet->len = EOF_PACKET_SIZE;
-eof_packet->
+	eof_packet->len = SIZE_EOF_PACKET;
+	eof_packet->ackno = 1;
+	eof_packet->rwnd = 1;
+	eof_packet->seqno = 0;
+	eof_packet->cksum = computeChecksum(eof_packet, SIZE_EOF_PACKET);
+	return eof_packet;
+}
+
+/*
+ * struct packet {
+ * uint16_t cksum;
+ * uint16_t len;
+ * uint32_t ackno;
+ * uint32_t rwnd;
+ * uint32_t seqno; Only valid if length > 8
+ * char data[1000];
+ };
+ */
+
+void convertToHostByteOrder(packet_t* packet) {
+	packet->len = ntohs(packet->len);
+	packet->ackno = ntohl(packet->ackno);
+
+	/* if the packet is a data packet it additionally has a seqno that has
+	 to be converted to host byte order */
+	if (packet->len != SIZE_ACK_PACKET)
+		packet->seqno = ntohl(packet->seqno);
+}
+
+void convertToNetworkByteOrder(packet_t *packet) {
+// if data packet, convert its seqno as well
+	if (packet->len != SIZE_ACK_PACKET)
+		packet->seqno = htonl(packet->seqno);
+
+	packet->len = htons(packet->len);
+	packet->ackno = htonl(packet->ackno);
+}
+
+uint16_t computeChecksum(packet_t *packet, int packetLength) {
+	memset(&(packet->cksum), 0, sizeof(packet->cksum));
+	return cksum((void*) packet, packetLength);
 }
