@@ -84,7 +84,7 @@ void destroy_sending_window(struct sliding_window_send*);
 void destory_receiving_window(struct sliding_window_receive*);
 void send_ack_pck(rel_t*, int);
 
-int checkCorruptedPacket(packet_t*, size_t);
+int isPacketCorrupted(packet_t*, size_t);
 void convertToHostByteOrder(packet_t*);
 void processAckPacket(rel_t*, packet_t*);
 void processPacket(rel_t*, packet_t*);
@@ -101,10 +101,14 @@ void create_and_send_ack_packet(rel_t *, uint32_t);
 void save_outgoing_data_packet(rel_t *, packet_t *, int);
 struct ack_packet* createAckPacket(uint32_t);
 
-/* Creates a new reliable protocol session, returns NULL on failure.
+/**
+ * Creates a new reliable protocol session, returns NULL on failure.
  * Exactly one of c and ss should be NULL.  (ss is NULL when called
  * from rlib.c, while c is NULL when this function is called from
- * rel_demux.) */
+ * rel_demux.)
+ * @author Lawrence (Aohui) Lin
+ */
+
 rel_t *
 rel_create(conn_t *c, const struct sockaddr_storage *ss,
 		const struct config_common *cc) {
@@ -137,6 +141,9 @@ rel_create(conn_t *c, const struct sockaddr_storage *ss,
 	return r;
 }
 
+/**
+ * @author Lawrence (Aohui) Lin
+ */
 void rel_destroy(rel_t *r) {
 	if (r->next) {
 		r->next->prev = r->prev;
@@ -168,10 +175,10 @@ void rel_demux(const struct config_common *cc,
  * 	convert to host byte order
  * 	check if ack only or actual data included,
  * 		and pass the packet to corresponding handler
- *
+ * @author Steve (Siyang) Wang
  */
 void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
-	if (checkCorruptedPacket(pkt, n))
+	if (isPacketCorrupted(pkt, n))
 		return; //check if corrupted
 
 	convertToHostByteOrder(pkt); // convert to host byte order
@@ -183,7 +190,10 @@ void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
 	}
 }
 
-// function used by client (packet sending side)
+/**
+ * function used by client (packet sending side)
+ * @author Steve (Siyang) Wang
+ */
 void rel_read(rel_t *relState) {
 	if (relState->client_state == WAITING_INPUT_DATA) {
 		/* try to read from input and create a packet */
@@ -215,6 +225,7 @@ void rel_read(rel_t *relState) {
 /*
  * Call conn_bufspace to get buffer space. If not space available, no ack and no output
  * If there is space, output data (partially or fully) and send acks
+ * @author Justin (Zihao) Zhang
  */
 void rel_output(rel_t *r) {
 	conn_t *c = r->c;
@@ -254,6 +265,7 @@ void rel_output(rel_t *r) {
 	}
 
 	//TODO: if EOF, send ack and destroy connection
+
 //	if (packet->len == SIZE_EOF_PACKET) {
 //		conn_output(r->c, NULL, 0);
 //		r->server_state = SERVER_FINISHED;
@@ -265,7 +277,10 @@ void rel_output(rel_t *r) {
 //	}
 }
 
-/* Retransmit any packets that need to be retransmitted in sender */
+/**
+ * Retransmit any packets that need to be retransmitted in sender
+ * @author Justin (Zihao) Zhang
+ */
 void rel_timer() {
 	rel_t* cur_rel = rel_list;
 	while (cur_rel) {
@@ -369,17 +384,18 @@ void destory_receiving_window(struct sliding_window_receive* window) {
  * computing its checksum and comparing to the checksum in the packet.
  * Returns 1 if packet is corrupted and 0 if it is not.
  */
-int checkCorruptedPacket(packet_t* packet, size_t pkt_length) {
+int isPacketCorrupted(packet_t* packet, size_t pkt_length) {
 	int packetLength = (int) ntohs(packet->len);
 	/* If we received fewer bytes than the packet's size declare corruption. */
-	if (pkt_length < (size_t) packetLength)
+	if (pkt_length < (size_t) packetLength) {
 		return 1;
+	}
 
-	uint16_t wantedChecksum = packet->cksum;
+	uint16_t expectedChecksum = packet->cksum;
 	uint16_t computedChecksum = computeChecksum(packet, packetLength);
-
-	return wantedChecksum != computedChecksum;
+	return expectedChecksum != computedChecksum;
 }
+
 void convertToHostByteOrder(packet_t* packet) {
 	packet->len = ntohs(packet->len);
 	packet->ackno = ntohl(packet->ackno);
@@ -389,6 +405,7 @@ void convertToHostByteOrder(packet_t* packet) {
 	if (packet->len != SIZE_ACK_PACKET)
 		packet->seqno = ntohl(packet->seqno);
 }
+
 void processAckPacket(rel_t* r, packet_t* pkt) {
 	process_ack(r, (packet_t*) pkt);
 }
