@@ -57,7 +57,7 @@ rel_t *rel_list;
 ////////////////////////////////////////////////////////////////////////
 ////////////////////////// Helper functions /////////////////////////////
 ////////////////////////////////////////////////////////////////////////
-packet_t * make_EOF_packet();
+packet_t * create_EOF_packet();
 int check_acks_validity(rel_t, packet_t); // check whether the received ack has the ack number that we are expecting
 void convertToHostByteOrder(packet_t*);
 void convertToNetworkByteOrder(packet_t *);
@@ -182,7 +182,7 @@ rel_timer ()
 
 
 //////////////////////////////// Helper functions ///////////////////////////////
-packet_t * make_EOF_packet() {
+packet_t * create_EOF_packet() {
 	packet_t* eof_packet = (packet_t *) malloc(sizeof(packet_t));
 	eof_packet -> len = SIZE_EOF_PACKET;
 	eof_packet -> ackno = 1;
