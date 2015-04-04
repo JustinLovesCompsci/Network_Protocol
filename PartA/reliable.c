@@ -70,6 +70,7 @@ struct reliable_state {
 
 /* global variables */
 rel_t *rel_list;
+int debug = 1;
 
 /* debug functions */
 void print_rel(rel_t *);
@@ -254,7 +255,7 @@ void rel_output(rel_t *r) {
 			if (current_pck->len == SIZE_EOF_PACKET) { /* EOF packet */
 				r->server_state = SERVER_FINISHED;
 				if (r->client_state == CLIENT_FINISHED) { //TODO: what's the need for this?
-					rel_destory(r);
+					rel_destroy(r);
 				}
 				break;
 			}
@@ -288,6 +289,9 @@ void rel_timer() {
 				perror(
 						"Error generated from getting current time in rel_timer");
 			}
+			/* TODO: subtract time_sent from current_time,
+			 * if difference is greater than timeout, retransmit data packet,
+			 * if not, do nothing */
 
 			node = node->next;
 		}
