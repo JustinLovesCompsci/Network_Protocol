@@ -14,7 +14,7 @@
 #include "rlib.h"
 
 #define SIZE_ACK_PACKET 8
-#define SIZE_EOF_PACKET 8
+#define SIZE_EOF_PACKET 12
 #define SIZE_DATA_PCK_HEADER 12
 #define SIZE_MAX_PAYLOAD 500
 #define INIT_SEQ_NUM 1
@@ -29,7 +29,9 @@
 #define WAITING_DATA_PACKET 0
 #define WAITING_TO_FLUSH_DATA 1
 #define SERVER_FINISHED 2
-
+/**
+ * seqno_last_packet_expected refers to the next packet expected to be received (always one greater than seqno_last_packet_read;
+ */
 struct packet_node {
 	struct packet_node *next;
 	struct packet_node *prev;
@@ -246,11 +248,21 @@ void rel_output(rel_t *r) {
 	}
 
 	/* send ack */
-	if (ackno_to_send != -1) {
+	if (ackno_to_send > 1) {
 		send_ack_pck(r, ackno_to_send);
+		r->receiving_window->seqno_last_packet_read = ackno_to_send - 1;
 	}
 
-	//TODO: deal with EOF
+	//TODO: if EOF, send ack and destroy connection
+//	if (packet->len == SIZE_EOF_PACKET) {
+//		conn_output(r->c, NULL, 0);
+//		r->server_state = SERVER_FINISHED;
+//		send_ack_pck(r, packet->seqno + 1);
+//
+//		/* destroy the connection only if our client has finished transmitting */
+//		if (r->client_state == CLIENT_FINISHED)
+//			rel_destroy(r);
+//	}
 }
 
 /* Retransmit any packets that need to be retransmitted in sender */
@@ -457,10 +469,10 @@ void process_data_packet(rel_t *r, packet_t *packet) {
 void send_ack_pck(rel_t* r, int ack_num) {
 	//TODO: make sure r is not null and ack_num is not sent before, update ackno recorded in r if needed
 	packet_t* ack_pck = (packet_t*) malloc(sizeof(packet_t));
-	ack_pck->ackno = htonl(ack_num);
-	ack_pck->len = htons(SIZE_ACK_PACKET);
-	ack_pck->cksum = 0;
-	ack_pck->cksum = cksum(ack_pck, SIZE_ACK_PACKET);
+	ack_pck->ackno = ack_num;
+	ack_pck->len = SIZE_ACK_PACKET;
+	computeChecksum(ack_pck, SIZE_ACK_PACKET);
+	convertToNetworkByteOrder(ack_pck);
 	conn_sendpkt(r->c, ack_pck, SIZE_ACK_PACKET);
 	free(ack_pck);
 }
@@ -533,18 +545,17 @@ void prepareToTransmit(packet_t* packet) {
 }
 
 void convertToNetworkByteOrder(packet_t *packet) {
-// if data packet, convert its seqno as well
-	if (packet->len != SIZE_ACK_PACKET)
+	if (packet->len != SIZE_ACK_PACKET) { /* if data packet, convert its seqno */
 		packet->seqno = htonl(packet->seqno);
-
+	}
 	packet->len = htons(packet->len);
 	packet->ackno = htonl(packet->ackno);
 }
 
 // need to supply pktLength as the field might be network byte order already
 uint16_t computeChecksum(packet_t *packet, int packetLength) {
-	memset(&(packet->cksum), 0, sizeof(packet->cksum));
-	return cksum((void*) packet, packetLength);
+	packet->cksum = 0;
+	return cksum(packet, packetLength);
 }
 
 /*
