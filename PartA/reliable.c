@@ -209,6 +209,88 @@ void rel_read(rel_t *relState) {
 
 }
 
+
+void processAckPacket(rel_t* r, packet_t* pkt) {
+	process_ack(r, (packet_t*) pkt);
+}
+
+/* Server should process the data part of the packet
+ * client should process ack part of the packet. */
+void processPacket(rel_t* r, packet_t* pkt) {
+
+	/* Pass the packet to the server piece to process the data packet */
+	process_data_packet(r, pkt);
+
+	/* Pass the packet to the client piece to process the ackno field */
+	process_ack(r, pkt);
+}
+
+/* processes received ack only packets which have passed the corruption check.
+ This functionality belongs to the client and server piece.
+ */
+void process_ack(rel_t *r, packet_t *packet) {
+	/* proceed only if we are waiting for an ack */
+	if (r->client_state == WAITING_ACK) {
+		/* received ack for last normal packet sent, go back to waiting for input
+		 and try to read */
+		if (packet->ackno == r->sending_window->seqno_last_packet_sent + 1) {
+			r->client_state = WAITING_INPUT_DATA;
+			rel_read(r);
+		}
+	} else if (r->client_state == WAITING_EOF_ACK) {
+		/* received ack for EOF packet, enter declare client connection to be finished */
+		if (packet->ackno == r->sending_window->seqno_last_packet_sent + 1) {
+			r->client_state = CLIENT_FINISHED;
+
+			/* destroy the connection only if the other side's client has finished transmitting */
+			if (r->server_state == SERVER_FINISHED)
+				rel_destroy(r);
+		}
+	}
+}
+
+/* This function processes a data packet.
+ * This is functionality of the server piece. */
+void process_data_packet(rel_t *r, packet_t *packet) {
+	// if we receive a packet we have seen and processed before then just send an ack bacl regardless on which state the server is in
+
+	/* if we have received the next in-order packet we were expecting and we are waiting
+	 for data packets process the packet */
+	if ((packet->seqno == r->receiving_window->seqno_next_packet_expected)
+			&& (r->server_state == WAITING_DATA_PACKET)) { // check if needed to do status check
+
+		/* if we received an EOF packet signal to conn_output and destroy the connection if appropriate */
+		if (packet->len == SIZE_EOF_PACKET) {
+			conn_output(r->c, NULL, 0);
+			r->server_state = SERVER_FINISHED;
+			create_and_send_ack_packet(r, packet->seqno + 1);
+
+			/* destroy the connection only if our client has finished transmitting */
+			if (r->client_state == CLIENT_FINISHED)
+				rel_destroy(r);
+		}
+		// we receive a non-EOF data packet, check receiving window size, and append
+		else {
+			//check if receiving window size less
+			uint32_t seqnoLastReceived = r->receiving_window->last_packet_received->packet->seqno;
+			uint32_t seqnoLastRead = r->receiving_window->seqno_last_packet_read;
+			if (seqnoLastReceived-seqnoLastRead + 1 < r->config->window){
+				r->receiving_window-> last_packet_received -> next = packet;
+			}
+			// system will handle sending ack
+
+
+			if (flush_payload_to_output(r)) {
+				create_and_send_ack_packet(r, packet->seqno + 1);
+				r->receiving_window->seqno_next_packet_expected = packet->seqno
+						+ 1;
+			} else {
+				r->server_state = WAITING_TO_FLUSH_DATA;
+			}
+		}
+	}
+}
+
 /*
  * Call conn_bufspace to get buffer space. If not space available, no ack and no output
  * If there is space, output data (partially or fully) and send acks
@@ -362,82 +444,7 @@ void convertToHostByteOrder(packet_t* packet) {
 	if (packet->len != SIZE_ACK_PACKET)
 		packet->seqno = ntohl(packet->seqno);
 }
-void processAckPacket(rel_t* r, packet_t* pkt) {
-	process_ack(r, (packet_t*) pkt);
-}
 
-/* Server should process the data part of the packet
- * client should process ack part of the packet. */
-void processPacket(rel_t* r, packet_t* pkt) {
-
-	/* Pass the packet to the server piece to process the data packet */
-	process_data_packet(r, pkt);
-
-	/* Pass the packet to the client piece to process the ackno field */
-	process_ack(r, pkt);
-}
-
-/*
- * processes received ack only packets which have passed the corruption check.
- This functionality belongs to the client and server piece.
- */
-void process_ack(rel_t *r, packet_t *packet) {
-	/* proceed only if we are waiting for an ack */
-	if (r->client_state == WAITING_ACK) {
-		/* received ack for last normal packet sent, go back to waiting for input
-		 and try to read */
-		if (packet->ackno == r->sending_window->seqno_last_packet_sent + 1) {
-			r->client_state = WAITING_INPUT_DATA;
-			rel_read(r);
-		}
-	} else if (r->client_state == WAITING_EOF_ACK) {
-		/* received ack for EOF packet, enter declare client connection to be finished */
-		if (packet->ackno == r->sending_window->seqno_last_packet_sent + 1) {
-			r->client_state = CLIENT_FINISHED;
-
-			/* destroy the connection only if the other side's client has finished transmitting */
-			if (r->server_state == SERVER_FINISHED)
-				rel_destroy(r);
-		}
-	}
-}
-
-/* This function processes a data packet.
- * This is functionality of the server piece. */
-void process_data_packet(rel_t *r, packet_t *packet) {
-	/* if we receive a packet we have seen and processed before then just send an ack back
-	 regardless on which state the server is in */
-	if (packet->seqno < r->receiving_window->seqno_next_packet_expected)
-		create_and_send_ack_packet(r, packet->seqno + 1);
-
-	/* if we have received the next in-order packet we were expecting and we are waiting
-	 for data packets process the packet */
-	if ((packet->seqno == r->receiving_window->seqno_next_packet_expected)
-			&& (r->server_state == WAITING_DATA_PACKET)) {
-		/* if we received an EOF packet signal to conn_output and destroy the connection if appropriate */
-		if (packet->len == SIZE_EOF_PACKET) {
-			conn_output(r->c, NULL, 0);
-			r->server_state = SERVER_FINISHED;
-			create_and_send_ack_packet(r, packet->seqno + 1);
-
-			/* destroy the connection only if our client has finished transmitting */
-			if (r->client_state == CLIENT_FINISHED)
-				rel_destroy(r);
-		}
-		/* we receive a non-EOF data packet, so try to flush it to conn_output */
-		else {
-			save_incoming_data_packet(r, packet);
-
-			if (flush_payload_to_output(r)) {
-				create_and_send_ack_packet(r, packet->seqno + 1);
-				r->receiving_window->seqno_next_packet_expected = packet->seqno
-						+ 1;
-			} else {
-				r->server_state = WAITING_TO_FLUSH_DATA;
-			}
-		}
-	}
-}
 
 void send_ack_pck(rel_t* r, int ack_num) {
 	//TODO: make sure r is not null and ack_num is not sent before, update ackno recorded in r if needed
@@ -483,7 +490,7 @@ struct packet_node* get_first_unacked_pck(rel_t* r) {
  */
 packet_t *create_packet_from_conninput(rel_t *r) {
 	packet_t *packet;
-	packet = xmalloc(sizeof(*packet));
+	packet = malloc(sizeof(*packet));
 
 	//read one full packet's worth of data from input
 	int bytesRead = conn_input(r->c, packet->data, SIZE_MAX_PAYLOAD);
@@ -565,8 +572,9 @@ struct ack_packet* createAckPacket(uint32_t ackNum) {
 	return ackPacket;
 }
 /**
- * Called by server side
+ * Called by server side:
+ * if non-EOF: flush the packet to conn_output: if succesful flush
  * flush the part of the last received
  */
-//void flushPayloadToOutput
+void flushPayloadToOutput
 
