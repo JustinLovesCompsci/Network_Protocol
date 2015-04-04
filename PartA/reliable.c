@@ -19,7 +19,7 @@
 #define SIZE_MAX_PAYLOAD 500
 #define INIT_SEQ_NUM 1
 
-/*cient states*/
+/*client states*/
 #define WAITING_INPUT_DATA 0
 #define WAITING_ACK 1
 #define WAITING_EOF_ACK 2
@@ -79,12 +79,13 @@ void print_receiving_window(struct sliding_window_receive*);
 void print_config(struct config_common);
 
 /* helper functions */
-struct sliding_window_send * initialize_sending_window();
-struct sliding_window_receive * initialize_receiving_window();
+struct sliding_window_send * init_sending_window();
+struct sliding_window_receive * init_receiving_window();
 void destroy_sending_window(struct sliding_window_send*);
 void destory_receiving_window(struct sliding_window_receive*);
 void send_ack_pck(rel_t*, int);
 int isGreaterThan(struct timeval*, int);
+void send_data_pck(rel_t*, struct packet_node*, struct timeval*);
 
 int isPacketCorrupted(packet_t*, size_t);
 void convertToHostByteOrder(packet_t*);
@@ -136,8 +137,8 @@ rel_create(conn_t *c, const struct sockaddr_storage *ss,
 
 	/* Do any other initialization you need here */
 	r->config = *cc;
-	r->sending_window = initialize_sending_window();
-	r->receiving_window = initialize_receiving_window();
+	r->sending_window = init_sending_window();
+	r->receiving_window = init_receiving_window();
 
 	print_rel(r);
 	return r;
@@ -295,11 +296,10 @@ void rel_timer() {
 					sizeof(struct timeval));
 			timersub(current_time, node->time_sent, diff);
 			if (isGreaterThan(diff, cur_rel->config.timeout)) { /* Retransmit because exceeds timeout */
-				packet_t * packet = node->packet;
-				size_t pckLen = packet->len;
-				prepareToTransmit(packet);
-				conn_sendpkt(cur_rel->c, packet, pckLen);
-				node->time_sent = current_time;
+				if (debug) {
+
+				}
+				send_data_pck(cur_rel, node, current_time);
 			}
 			free(diff);
 			node = node->next;
@@ -348,21 +348,21 @@ void print_receiving_window(struct sliding_window_receive * window) {
 ////////////////////////////////////////////////////////////////////////
 ////////////////////////// Helper functions /////////////////////////////
 ////////////////////////////////////////////////////////////////////////
-struct sliding_window_send * initialize_sending_window() {
+struct sliding_window_send * init_sending_window() {
 	struct sliding_window_send * window = (struct sliding_window_send *) malloc(
 			sizeof(struct sliding_window_send));
-	window->seqno_last_packet_acked = 1;
-	window->last_packet_sent = 1;
+	window->seqno_last_packet_acked = 0;
+	window->seqno_last_packet_sent = INIT_SEQ_NUM;
 	window->last_packet_sent = NULL;
 	return window;
 }
 
-struct sliding_window_receive * initialize_receiving_window() {
+struct sliding_window_receive * init_receiving_window() {
 	struct sliding_window_receive * window =
 			(struct sliding_window_receive *) malloc(
 					sizeof(struct sliding_window_receive));
-	window->seqno_last_packet_read = 1;
-	window->seqno_next_packet_expected = 1;
+	window->seqno_last_packet_read = 0;
+	window->seqno_next_packet_expected = INIT_SEQ_NUM;
 	window->last_packet_received = NULL;
 	return window;
 }
@@ -496,6 +496,18 @@ void send_ack_pck(rel_t* r, int ack_num) {
 	convertToNetworkByteOrder(ack_pck);
 	conn_sendpkt(r->c, ack_pck, SIZE_ACK_PACKET);
 	free(ack_pck);
+}
+
+/**
+ * @param packet is in host order
+ */
+void send_data_pck(rel_t*r, struct packet_node* pkt_ptr,
+		struct timeval* current_time) {
+	packet_t * packet = pkt_ptr->packet;
+	size_t pckLen = packet->len;
+	prepareToTransmit(packet);
+	conn_sendpkt(r->c, packet, pckLen);
+	pkt_ptr->time_sent = current_time;
 }
 
 struct packet_node* get_first_unread_pck(rel_t* r) {
