@@ -286,7 +286,7 @@ void rel_timer() {
 		while (node) {
 			struct timeval* current_time = (struct timeval*) malloc(
 					sizeof(struct timeval));
-			if (gettimeofday(&(current_time), NULL) == -1) {
+			if (gettimeofday(current_time, NULL) == -1) {
 				perror(
 						"Error generated from getting current time in rel_timer");
 			}
@@ -295,8 +295,13 @@ void rel_timer() {
 					sizeof(struct timeval));
 			timersub(current_time, node->time_sent, diff);
 			if (isGreaterThan(diff, cur_rel->config.timeout)) { /* Retransmit because exceeds timeout */
-				//TODO: retransmit current packet
+				packet_t * packet = node->packet;
+				size_t pckLen = packet->len;
+				prepareToTransmit(packet);
+				conn_sendpkt(cur_rel->c, packet, pckLen);
+				node->time_sent = current_time;
 			}
+			free(diff);
 			node = node->next;
 		}
 		cur_rel = rel_list->next;
