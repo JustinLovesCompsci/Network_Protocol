@@ -14,7 +14,7 @@
 #include "rlib.h"
 
 #define SIZE_ACK_PACKET 8
-#define SIZE_EOF_PACKET 8
+#define SIZE_EOF_PACKET 12
 #define SIZE_DATA_PCK_HEADER 12
 #define SIZE_MAX_PAYLOAD 500
 #define INIT_SEQ_NUM 1
@@ -29,11 +29,14 @@
 #define WAITING_DATA_PACKET 0
 #define WAITING_TO_FLUSH_DATA 1
 #define SERVER_FINISHED 2
-
+/**
+ * seqno_last_packet_expected refers to the next packet expected to be received (always one greater than seqno_last_packet_read;
+ */
 struct packet_node {
 	struct packet_node *next;
 	struct packet_node *prev;
 	packet_t * packet;
+	struct timeval* time_sent;
 };
 
 struct sliding_window_send {
@@ -67,6 +70,7 @@ struct reliable_state {
 
 /* global variables */
 rel_t *rel_list;
+int debug = 1;
 
 /* debug functions */
 void print_rel(rel_t *);
@@ -79,14 +83,15 @@ struct sliding_window_send * initialize_sending_window();
 struct sliding_window_receive * initialize_receiving_window();
 void destroy_sending_window(struct sliding_window_send*);
 void destory_receiving_window(struct sliding_window_receive*);
+void send_ack_pck(rel_t*, int);
+int isGreaterThan(struct timeval*, int);
 
-int checkCorruptedPacket(packet_t*, size_t);
+int isPacketCorrupted(packet_t*, size_t);
 void convertToHostByteOrder(packet_t*);
 void processAckPacket(rel_t*, packet_t*);
 void processPacket(rel_t*, packet_t*);
 uint16_t computeChecksum(packet_t*, int);
 
-void send_ack_pck(rel_t*, int);
 struct packet_node* get_first_unread_pck(rel_t*);
 struct packet_node* get_first_unacked_pck(rel_t*);
 packet_t *create_packet_from_conninput(rel_t *);
@@ -98,10 +103,14 @@ void create_and_send_ack_packet(rel_t *, uint32_t);
 void save_outgoing_data_packet(rel_t *, packet_t *, int);
 struct ack_packet* createAckPacket(uint32_t);
 
-/* Creates a new reliable protocol session, returns NULL on failure.
+/**
+ * Creates a new reliable protocol session, returns NULL on failure.
  * Exactly one of c and ss should be NULL.  (ss is NULL when called
  * from rlib.c, while c is NULL when this function is called from
- * rel_demux.) */
+ * rel_demux.)
+ * @author Lawrence (Aohui) Lin
+ */
+
 rel_t *
 rel_create(conn_t *c, const struct sockaddr_storage *ss,
 		const struct config_common *cc) {
@@ -134,6 +143,9 @@ rel_create(conn_t *c, const struct sockaddr_storage *ss,
 	return r;
 }
 
+/**
+ * @author Lawrence (Aohui) Lin
+ */
 void rel_destroy(rel_t *r) {
 	if (r->next) {
 		r->next->prev = r->prev;
@@ -165,10 +177,10 @@ void rel_demux(const struct config_common *cc,
  * 	convert to host byte order
  * 	check if ack only or actual data included,
  * 		and pass the packet to corresponding handler
- *
+ * @author Steve (Siyang) Wang
  */
 void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
-	if (checkCorruptedPacket(pkt, n))
+	if (isPacketCorrupted(pkt, n))
 		return; //check if corrupted
 
 	convertToHostByteOrder(pkt); // convert to host byte order
@@ -180,7 +192,10 @@ void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
 	}
 }
 
-// function used by client (packet sending side)
+/**
+ * function used by client (packet sending side)
+ * @author Steve (Siyang) Wang
+ */
 void rel_read(rel_t *relState) {
 	if (relState->client_state == WAITING_INPUT_DATA) {
 		/* try to read from input and create a packet */
@@ -208,7 +223,6 @@ void rel_read(rel_t *relState) {
 	}
 
 }
-
 
 void processAckPacket(rel_t* r, packet_t* pkt) {
 	process_ack(r, (packet_t*) pkt);
@@ -272,13 +286,13 @@ void process_data_packet(rel_t *r, packet_t *packet) {
 		// we receive a non-EOF data packet, check receiving window size, and append
 		else {
 			//check if receiving window size less
-			uint32_t seqnoLastReceived = r->receiving_window->last_packet_received->packet->seqno;
+			uint32_t seqnoLastReceived =
+					r->receiving_window->last_packet_received->packet->seqno;
 			uint32_t seqnoLastRead = r->receiving_window->seqno_last_packet_read;
-			if (seqnoLastReceived-seqnoLastRead + 1 < r->config->window){
-				r->receiving_window-> last_packet_received -> next = packet;
+			if (seqnoLastReceived - seqnoLastRead + 1 < r->config->window) {
+				r->receiving_window->last_packet_received->next = packet;
 			}
 			// system will handle sending ack
-
 
 			if (flush_payload_to_output(r)) {
 				create_and_send_ack_packet(r, packet->seqno + 1);
@@ -294,12 +308,14 @@ void process_data_packet(rel_t *r, packet_t *packet) {
 /*
  * Call conn_bufspace to get buffer space. If not space available, no ack and no output
  * If there is space, output data (partially or fully) and send acks
+ * @author Justin (Zihao) Zhang
  */
 void rel_output(rel_t *r) {
 	conn_t *c = r->c;
 	size_t free_space = conn_bufspace(c);
+	/* no ack and no output if no space available */
 	if (free_space == 0) {
-		return; //no ack and no output if no space available
+		return;
 	}
 
 	struct packet_node* packet_ptr = get_first_unread_pck(r);
@@ -318,6 +334,13 @@ void rel_output(rel_t *r) {
 		if (free_space > current_pck->len - SIZE_DATA_PCK_HEADER) { /* enough space to output a whole packet */
 			assert(bytesWritten == current_pck->len - SIZE_DATA_PCK_HEADER);
 			ackno_to_send = current_pck->seqno + 1;
+			if (current_pck->len == SIZE_EOF_PACKET) { /* EOF packet */
+				r->server_state = SERVER_FINISHED;
+				if (r->client_state == CLIENT_FINISHED) { //TODO: what's the need for this?
+					rel_destroy(r);
+				}
+				break;
+			}
 			packet_ptr = packet_ptr->next;
 		} else { /* enough space to output only partial packet */
 			*current_pck->data += bytesWritten; //NOTE: check pointer increment correctness
@@ -327,16 +350,38 @@ void rel_output(rel_t *r) {
 	}
 
 	/* send ack */
-	if (ackno_to_send != -1) {
+	if (ackno_to_send > 1) {
 		send_ack_pck(r, ackno_to_send);
+		r->receiving_window->seqno_last_packet_read = ackno_to_send - 1;
 	}
-
-	//TODO: deal with EOF
 }
 
+/**
+ * Retransmit any packets that have not been acked and exceed timeout in sender
+ * @author Justin (Zihao) Zhang
+ */
 void rel_timer() {
-	/* Retransmit any packets that need to be retransmitted */
+	rel_t* cur_rel = rel_list;
+	while (cur_rel) {
+		struct packet_node* node = get_first_unacked_pck(cur_rel);
+		while (node) {
+			struct timeval* current_time = (struct timeval*) malloc(
+					sizeof(struct timeval));
+			if (gettimeofday(&(current_time), NULL) == -1) {
+				perror(
+						"Error generated from getting current time in rel_timer");
+			}
 
+			struct timeval* diff = (struct timeval*) malloc(
+					sizeof(struct timeval));
+			timersub(current_time, node->time_sent, diff);
+			if (isGreaterThan(diff, cur_rel->config.timeout)) { /* Retransmit because exceeds timeout */
+				//TODO: retransmit current packet
+			}
+			node = node->next;
+		}
+		cur_rel = rel_list->next;
+	}
 }
 
 ////////////////////////////////////////////////////////////////////////
@@ -420,40 +465,43 @@ void destory_receiving_window(struct sliding_window_receive* window) {
 	free(window);
 }
 
+int isGreaterThan(struct timeval* time1, int millisec2) {
+	int millisec1 = time1->tv_sec * 1000 + time1->tv_usec / 1000;
+	return millisec1 > millisec2;
+}
+
 /*
  * computing its checksum and comparing to the checksum in the packet.
  * Returns 1 if packet is corrupted and 0 if it is not.
  */
-int checkCorruptedPacket(packet_t* packet, size_t pkt_length) {
+int isPacketCorrupted(packet_t* packet, size_t pkt_length) {
 	int packetLength = (int) ntohs(packet->len);
 	/* If we received fewer bytes than the packet's size declare corruption. */
-	if (pkt_length < (size_t) packetLength)
+	if (pkt_length < (size_t) packetLength) {
 		return 1;
+	}
 
-	uint16_t wantedChecksum = packet->cksum;
+	uint16_t expectedChecksum = packet->cksum;
 	uint16_t computedChecksum = computeChecksum(packet, packetLength);
-
-	return wantedChecksum != computedChecksum;
+	return expectedChecksum != computedChecksum;
 }
-void convertToHostByteOrder(packet_t* packet) {
-	packet->len = ntohs(packet->len);
-	packet->ackno = ntohl(packet->ackno);
 
-	/* if the packet is a data packet it additionally has a seqno that has
-	 to be converted to host byte order */
-	if (packet->len != SIZE_ACK_PACKET)
-		packet->seqno = ntohl(packet->seqno);
-}
+/* if the packet is a data packet it additionally has a seqno that has
+ to be converted to host byte order */
+//if (packet->len != SIZE_ACK_PACKET)
+//packet->seqno = ntohl(packet->seqno);
+//}
 
 
 void send_ack_pck(rel_t* r, int ack_num) {
-	//TODO: make sure r is not null and ack_num is not sent before, update ackno recorded in r if needed
-	packet_t* ack_pck;
-	ack_pck->ackno = htonl(ack_num);
-	ack_pck->len = htons(SIZE_ACK_PACKET);
-	ack_pck->cksum = 0;
-	ack_pck->cksum = cksum(ack_pck, SIZE_ACK_PACKET);
+//TODO: make sure ack_num is not sent before
+	packet_t* ack_pck = (packet_t*) malloc(sizeof(packet_t));
+	ack_pck->ackno = ack_num;
+	ack_pck->len = SIZE_ACK_PACKET;
+	computeChecksum(ack_pck, SIZE_ACK_PACKET);
+	convertToNetworkByteOrder(ack_pck);
 	conn_sendpkt(r->c, ack_pck, SIZE_ACK_PACKET);
+	free(ack_pck);
 }
 
 struct packet_node* get_first_unread_pck(rel_t* r) {
@@ -492,7 +540,7 @@ packet_t *create_packet_from_conninput(rel_t *r) {
 	packet_t *packet;
 	packet = malloc(sizeof(*packet));
 
-	//read one full packet's worth of data from input
+//read one full packet's worth of data from input
 	int bytesRead = conn_input(r->c, packet->data, SIZE_MAX_PAYLOAD);
 
 	if (bytesRead == 0) // no inputt
@@ -500,9 +548,9 @@ packet_t *create_packet_from_conninput(rel_t *r) {
 		free(packet);
 		return NULL;
 	}
-	// create a packet else if there's some data
+// create a packet else if there's some data
 
-	// if we read an EOF create a zero byte payload, else we read normal bytes that should be declared in the len field
+// if we read an EOF create a zero byte payload, else we read normal bytes that should be declared in the len field
 	packet->len =
 			(bytesRead == -1) ?
 					(uint16_t) SIZE_DATA_PCK_HEADER :
@@ -519,33 +567,30 @@ packet_t *create_packet_from_conninput(rel_t *r) {
  */
 void prepareToTransmit(packet_t* packet) {
 	int packetLength = (int) (packet->len);
-
 	convertToNetworkByteOrder(packet);
 	packet->cksum = computeChecksum(packet, packetLength);
 }
 
 void convertToNetworkByteOrder(packet_t *packet) {
-// if data packet, convert its seqno as well
-	if (packet->len != SIZE_ACK_PACKET)
+	if (packet->len != SIZE_ACK_PACKET) { /* if data packet, convert its seqno */
 		packet->seqno = htonl(packet->seqno);
-
+	}
 	packet->len = htons(packet->len);
 	packet->ackno = htonl(packet->ackno);
 }
 
-// need to supply pktLength as the field might be network byte order already
-uint16_t computeChecksum(packet_t *packet, int packetLength) {
-	memset(&(packet->cksum), 0, sizeof(packet->cksum));
-	return cksum((void*) packet, packetLength);
+void convertToHostByteOrder(packet_t* packet) {
+	if (packet->len != SIZE_ACK_PACKET) { /* if data packet, convert its seqno */
+		packet->seqno = ntohl(packet->seqno);
+	}
+	packet->len = ntohs(packet->len);
+	packet->ackno = ntohl(packet->ackno);
 }
 
-// used to create and send ack packet
-void create_and_send_ack_packet(rel_t *relState, uint32_t ackno) {
-	struct ack_packet *ackPacket = createAckPacket(ackno);
-	int packetLength = ackPacket->len;
-	prepareToTransmit((packet_t*) ackPacket);
-	conn_sendpkt(relState->c, (packet_t*) ackPacket, (size_t) packetLength);
-	free(ackPacket);
+// need to supply pktLength as the field might be network byte order already
+uint16_t computeChecksum(packet_t *packet, int packetLength) {
+	packet->cksum = 0;
+	return cksum(packet, packetLength);
 }
 
 /*
@@ -562,19 +607,11 @@ void save_outgoing_data_packet(rel_t *relState, packet_t *packet,
 	gettimeofday(&(relState->sending_window->lastTransmissionTime), NULL); // keep track of the time of transmission
 }
 
-struct ack_packet* createAckPacket(uint32_t ackNum) {
-	struct ack_packet *ackPacket;
-	ackPacket = malloc(sizeof(*ackPacket));
-
-	ackPacket->len = (uint16_t) SIZE_ACK_PACKET;
-	ackPacket->ackno = ackNum;
-
-	return ackPacket;
-}
 /**
  * Called by server side:
  * if non-EOF: flush the packet to conn_output: if succesful flush
  * flush the part of the last received
  */
-void flushPayloadToOutput
+
+//void flushPayloadToOutput
 
