@@ -230,8 +230,9 @@ void rel_read(rel_t *relState) {
 void rel_output(rel_t *r) {
 	conn_t *c = r->c;
 	size_t free_space = conn_bufspace(c);
+	/* no ack and no output if no space available */
 	if (free_space == 0) {
-		return; //no ack and no output if no space available
+		return;
 	}
 
 	struct packet_node* packet_ptr = get_first_unread_pck(r);
@@ -250,6 +251,13 @@ void rel_output(rel_t *r) {
 		if (free_space > current_pck->len - SIZE_DATA_PCK_HEADER) { /* enough space to output a whole packet */
 			assert(bytesWritten == current_pck->len - SIZE_DATA_PCK_HEADER);
 			ackno_to_send = current_pck->seqno + 1;
+			if (current_pck->len == SIZE_EOF_PACKET) { /* EOF packet */
+				r->server_state = SERVER_FINISHED;
+				if (r->client_state == CLIENT_FINISHED) { //TODO: what's the need for this?
+					rel_destory(r);
+				}
+				break;
+			}
 			packet_ptr = packet_ptr->next;
 		} else { /* enough space to output only partial packet */
 			*current_pck->data += bytesWritten; //NOTE: check pointer increment correctness
@@ -263,18 +271,6 @@ void rel_output(rel_t *r) {
 		send_ack_pck(r, ackno_to_send);
 		r->receiving_window->seqno_last_packet_read = ackno_to_send - 1;
 	}
-
-	//TODO: if EOF, send ack and destroy connection
-
-//	if (packet->len == SIZE_EOF_PACKET) {
-//		conn_output(r->c, NULL, 0);
-//		r->server_state = SERVER_FINISHED;
-//		send_ack_pck(r, packet->seqno + 1);
-//
-//		/* destroy the connection only if our client has finished transmitting */
-//		if (r->client_state == CLIENT_FINISHED)
-//			rel_destroy(r);
-//	}
 }
 
 /**
