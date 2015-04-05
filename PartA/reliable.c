@@ -392,7 +392,8 @@ void rel_timer() {
 			timersub(current_time, node->time_sent, diff);
 			if (isGreaterThan(diff, cur_rel->config.timeout)) { /* Retransmit because exceeds timeout */
 				if (debug) {
-
+					printf("Found timeout packet and start to retransmit");
+					print_pkt(node->packet, "packet", node->packet->len);
 				}
 				send_data_pck(cur_rel, node, current_time);
 			}
@@ -424,7 +425,7 @@ void print_sending_window(struct sliding_window_send * window) {
 			window->seqno_last_packet_acked, window->seqno_last_packet_sent);
 	struct packet_node * pack = window->last_packet_sent;
 	while (pack) {
-		print_pkt(pack->packet, "packet", 1);
+		print_pkt(pack->packet, "packet", pack->packet->len);
 		pack = pack->next;
 	}
 }
@@ -435,7 +436,7 @@ void print_receiving_window(struct sliding_window_receive * window) {
 			window->seqno_last_packet_read, window->seqno_next_packet_expected);
 	struct packet_node * pack = window->last_packet_received;
 	while (pack) {
-		print_pkt(pack->packet, "packet", 1);
+		print_pkt(pack->packet, "packet", pack->packet->len);
 		pack = pack->next;
 	}
 }
