@@ -408,36 +408,46 @@ void rel_timer() {
 ////////////////////////// Debug functions /////////////////////////////
 ////////////////////////////////////////////////////////////////////////
 void print_rel(rel_t * rel) {
-	print_config(rel->config);
-	print_sending_window(rel->sending_window);
-	print_receiving_window(rel->receiving_window);
+	if (debug) {
+		print_config(rel->config);
+		print_sending_window(rel->sending_window);
+		print_receiving_window(rel->receiving_window);
+	}
 }
 
 void print_config(struct config_common c) {
-	printf(
-			"CONFIG info: Window size: %d, timer: %d, timeout: %d, single_connection: %d\n",
-			c.window, c.timer, c.timeout, c.single_connection);
+	if (debug) {
+		printf(
+				"CONFIG info: Window size: %d, timer: %d, timeout: %d, single_connection: %d\n",
+				c.window, c.timer, c.timeout, c.single_connection);
+	}
 }
 
 void print_sending_window(struct sliding_window_send * window) {
-	printf("Printing sending window related info....\n");
-	printf("Last packet acked: %u, last packet written: %u\n",
-			window->seqno_last_packet_acked, window->seqno_last_packet_sent);
-	struct packet_node * pack = window->last_packet_sent;
-	while (pack) {
-		print_pkt(pack->packet, "packet", pack->packet->len);
-		pack = pack->next;
+	if (debug) {
+		printf("Printing sending window related info....\n");
+		printf("Last packet acked: %u, last packet written: %u\n",
+				window->seqno_last_packet_acked,
+				window->seqno_last_packet_sent);
+		struct packet_node * pack = window->last_packet_sent;
+		while (pack) {
+			print_pkt(pack->packet, "packet", pack->packet->len);
+			pack = pack->next;
+		}
 	}
 }
 
 void print_receiving_window(struct sliding_window_receive * window) {
-	printf("Printing receiving window related info....\n");
-	printf("Last packet read: %u, next packet expected: %u\n",
-			window->seqno_last_packet_read, window->seqno_next_packet_expected);
-	struct packet_node * pack = window->last_packet_received;
-	while (pack) {
-		print_pkt(pack->packet, "packet", pack->packet->len);
-		pack = pack->next;
+	if (debug) {
+		printf("Printing receiving window related info....\n");
+		printf("Last packet read: %u, next packet expected: %u\n",
+				window->seqno_last_packet_read,
+				window->seqno_next_packet_expected);
+		struct packet_node * pack = window->last_packet_received;
+		while (pack) {
+			print_pkt(pack->packet, "packet", pack->packet->len);
+			pack = pack->next;
+		}
 	}
 }
 
