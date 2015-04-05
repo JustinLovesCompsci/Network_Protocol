@@ -91,7 +91,7 @@ int isPacketCorrupted(packet_t*, size_t);
 void convertToHostByteOrder(packet_t*);
 void processAckPacket(rel_t*, packet_t*);
 void processPacket(rel_t*, packet_t*);
-uint16_t computeChecksum(packet_t*, int);
+uint16_t getCheckSum(packet_t*, int);
 
 struct packet_node* get_first_unread_pck(rel_t*);
 struct packet_node* get_first_unacked_pck(rel_t*);
@@ -512,7 +512,7 @@ int isPacketCorrupted(packet_t* packet, size_t pkt_length) {
 	}
 
 	uint16_t expectedChecksum = packet->cksum;
-	uint16_t computedChecksum = computeChecksum(packet, packetLength);
+	uint16_t computedChecksum = getCheckSum(packet, packetLength);
 	return expectedChecksum != computedChecksum;
 }
 
@@ -526,7 +526,7 @@ void send_ack_pck(rel_t* r, int ack_num) {
 	packet_t* ack_pck = (packet_t*) malloc(sizeof(packet_t));
 	ack_pck->ackno = ack_num;
 	ack_pck->len = SIZE_ACK_PACKET;
-	ack_pck->cksum = computeChecksum(ack_pck, SIZE_ACK_PACKET);
+	ack_pck->cksum = getCheckSum(ack_pck, SIZE_ACK_PACKET);
 	convertToNetworkByteOrder(ack_pck);
 	conn_sendpkt(r->c, ack_pck, SIZE_ACK_PACKET);
 	free(ack_pck);
@@ -601,7 +601,7 @@ packet_t *create_packet_from_conninput(rel_t *r) {
  * 2. converts all necessary fields to network byte order
  */
 void addCKAndConvertOrder(packet_t* packet) {
-	packet->cksum = computeChecksum(packet, (int) packet->len);
+	packet->cksum = getCheckSum(packet, (int) packet->len);
 	assert(packet->cksum != 0);
 	convertToNetworkByteOrder(packet);
 }
@@ -624,8 +624,7 @@ void convertToHostByteOrder(packet_t* packet) {
 	packet->cksum = ntohs(packet->cksum);
 }
 
-// need to supply pktLength as the field might be network byte order already
-uint16_t computeChecksum(packet_t *packet, int packetLength) {
+uint16_t getCheckSum(packet_t *packet, int packetLength) {
 	packet->cksum = 0;
 	return cksum(packet, packetLength);
 }
@@ -635,7 +634,7 @@ packet_t * create_EOF_packet() {
 	eof_packet->len = SIZE_EOF_PACKET;
 	eof_packet->ackno = 1;
 	eof_packet->seqno = 0;
-	eof_packet->cksum = computeChecksum(eof_packet, SIZE_EOF_PACKET);
+	eof_packet->cksum = getCheckSum(eof_packet, SIZE_EOF_PACKET);
 	return eof_packet;
 }
 
