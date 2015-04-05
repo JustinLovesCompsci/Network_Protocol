@@ -81,6 +81,7 @@ struct sliding_window_receive * initialize_receiving_window();
 void destroy_sending_window(struct sliding_window_send*);
 void destory_receiving_window(struct sliding_window_receive*);
 void send_ack_pck(rel_t*, int);
+packet_t * create_EOF_packet();
 
 int checkCorruptedPacket(packet_t*, size_t);
 void convertToHostByteOrder(packet_t*);
@@ -131,7 +132,7 @@ rel_create(conn_t *c, const struct sockaddr_storage *ss,
 	r->sending_window = initialize_sending_window();
 	r->receiving_window = initialize_receiving_window();
 
-	print_rel(r);
+	print_rel(r); // debug
 	return r;
 }
 
@@ -171,6 +172,10 @@ void rel_demux(const struct config_common *cc,
 void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
 	if (checkCorruptedPacket(pkt, n))
 		return; //check if corrupted
+
+	// print out packet content for debugging purpose
+	char buffer [1000];
+	print_pkt (pkt, buffer, sizeof(pkt));
 
 	convertToHostByteOrder(pkt); // convert to host byte order
 
@@ -316,7 +321,7 @@ struct sliding_window_send * initialize_sending_window() {
 	struct sliding_window_send * window = (struct sliding_window_send *) malloc(
 			sizeof(struct sliding_window_send));
 	window->seqno_last_packet_acked = 1;
-	window->last_packet_sent = 1;
+	window->seqno_last_packet_sent = 0;
 	window->last_packet_sent = NULL;
 	return window;
 }
@@ -325,7 +330,7 @@ struct sliding_window_receive * initialize_receiving_window() {
 	struct sliding_window_receive * window =
 			(struct sliding_window_receive *) malloc(
 					sizeof(struct sliding_window_receive));
-	window->seqno_last_packet_read = 1;
+	window->seqno_last_packet_read = 0;
 	window->seqno_next_packet_expected = 1;
 	window->last_packet_received = NULL;
 	return window;
@@ -559,6 +564,15 @@ void save_outgoing_data_packet(rel_t *relState, packet_t *packet,
 	relState->sending_window->seqno_last_packet_sent = (size_t) packetLength;
 	relState->sending_window->seqno_last_packet_sent += 1;
 	gettimeofday(&(relState->sending_window->lastTransmissionTime), NULL); // keep track of the time of transmission
+}
+
+packet_t * create_EOF_packet() {
+	packet_t* eof_packet = (packet_t *) malloc(sizeof(packet_t));
+	eof_packet -> len = SIZE_EOF_PACKET;
+	eof_packet -> ackno = 1;
+	eof_packet -> seqno = 0;
+	eof_packet -> cksum = computeChecksum(eof_packet, SIZE_EOF_PACKET);
+	return eof_packet;
 }
 
 /**
