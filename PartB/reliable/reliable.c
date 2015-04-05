@@ -1,4 +1,3 @@
-
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
@@ -21,11 +20,11 @@
 #define SIZE_EOF_PACKET 16
 
 struct reliable_state {
-	rel_t *next;			/* Linked list for traversing all connections */
+	rel_t *next; /* Linked list for traversing all connections */
 	rel_t **prev;
-	conn_t *c;			/* This is the connection object */
+	conn_t *c; /* This is the connection object */
 
-  /* Add your own data fields below this */
+	/* Add your own data fields below this */
 	int ssthresh; // congestion window threshold
 	int cwnd;
 
@@ -50,20 +49,20 @@ rel_t *rel_list;
  * uint32_t rwnd;
  * uint32_t seqno; Only valid if length > 8
  * char data[1000];
-};
+ };
  */
-
 
 ////////////////////////////////////////////////////////////////////////
 ////////////////////////// Helper functions /////////////////////////////
 ////////////////////////////////////////////////////////////////////////
+int check_acks_validity(rel_t*, packet_t*); // check whether the received ack has the ack number that we are expecting
 packet_t * create_EOF_packet();
 int check_acks_validity(rel_t, packet_t); // check whether the received ack has the ack number that we are expecting
 void convertToHostByteOrder(packet_t*);
 void convertToNetworkByteOrder(packet_t *);
 uint16_t computeChecksum(packet_t *, int);
 
-int check_acks_validity(rel_t r, packet_t ack) {
+int check_acks_validity(rel_t* r, packet_t* ack) {
 	assert(ack->len == SIZE_ACK_PACKET);
 	return ack->ackno == r->expected_ack;
 }
@@ -73,56 +72,47 @@ int check_acks_validity(rel_t r, packet_t ack) {
  * from rlib.c, while c is NULL when this function is called from
  * rel_demux.) */
 rel_t *
-rel_create (conn_t *c, const struct sockaddr_storage *ss,
-	    const struct config_common *cc)
-{
-  rel_t *r;
+rel_create(conn_t *c, const struct sockaddr_storage *ss,
+		const struct config_common *cc) {
+	rel_t *r;
 
-  r = xmalloc (sizeof (*r));
-  memset (r, 0, sizeof (*r));
+	r = xmalloc(sizeof(*r));
+	memset(r, 0, sizeof(*r));
 
-  if (!c) {
-    c = conn_create (r, ss);
-    if (!c) {
-      free (r);
-      return NULL;
-    }
-  }
+	if (!c) {
+		c = conn_create(r, ss);
+		if (!c) {
+			free(r);
+			return NULL;
+		}
+	}
 
-  r->c = c;
-  rel_list = r;
+	r->c = c;
+	rel_list = r;
 
-  /* Do any other initialization you need here */
-  r->ssthresh = INT_MAX;
-  r->cwnd = 1;
-  r->duplicated_ack_counter = 0;
-  r->expected_ack = 1;
-  r->has_sent_EOF_packet = 0;
+	/* Do any other initialization you need here */
+	r->ssthresh = INT_MAX;
+	r->cwnd = 1;
+	r->duplicated_ack_counter = 0;
+	r->expected_ack = 1;
+	r->has_sent_EOF_packet = 0;
 
-  // NOTE: if server/receiver, send EOF packet to client. If client, start slow start.
-  return r;
+	// NOTE: if server/receiver, send EOF packet to client. If client, start slow start.
+	return r;
 }
 
-void
-rel_destroy (rel_t *r)
-{
-  conn_destroy (r->c);
+void rel_destroy(rel_t *r) {
+	conn_destroy(r->c);
 
-  /* Free any other allocated memory here */
+	/* Free any other allocated memory here */
 }
 
-
-void
-rel_demux (const struct config_common *cc,
-	   const struct sockaddr_storage *ss,
-	   packet_t *pkt, size_t len)
-{
-  //leave it blank here!!!
+void rel_demux(const struct config_common *cc,
+		const struct sockaddr_storage *ss, packet_t *pkt, size_t len) {
+	//leave it blank here!!!
 }
 
-void
-rel_recvpkt (rel_t *r, packet_t *pkt, size_t n)
-{
+void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
 	// TODO: If receive normal ack, first check if it is a triply duplicated ack. If not,
 	//	1. increment cwnd (cwnd = cwnd + 1/cwnd)
 	// 	2. set last ack no. and set duplicated_ack_counter to be 1
@@ -135,42 +125,33 @@ rel_recvpkt (rel_t *r, packet_t *pkt, size_t n)
 	// TODO: handle EOF and data packets
 }
 
+void rel_read(rel_t *s) {
+	if (s->c->sender_receiver == RECEIVER) {
+		//if already sent EOF to the sender
+		//  return;
+		//else
+		//  send EOF to the sender
 
-void
-rel_read (rel_t *s)
-{
-  if(s->c->sender_receiver == RECEIVER)
-  {
-    //if already sent EOF to the sender
-    //  return;
-    //else
-    //  send EOF to the sender
-
-	  if (s->has_sent_EOF_packet == 1) {
-		  return;
-	  } else {
-		  packet_t * eof_packet = make_eof_packet();
-		  assert(sizeof(eof_packet) == SIZE_ACK_PACKET);
-		  conn_sendpkt(s->c, eof_packet, (size_t) SIZE_ACK_PACKET);
-		  s -> has_sent_EOF_packet = 1;
-		  free(eof_packet);
-	  }
-  }
-  else //run in the sender mode
-  {
-    //same logic as lab 1
-  }
+		if (s->has_sent_EOF_packet == 1) {
+			return;
+		} else {
+			packet_t * eof_packet = make_eof_packet();
+			assert(sizeof(eof_packet) == SIZE_ACK_PACKET);
+			conn_sendpkt(s->c, eof_packet, (size_t) SIZE_ACK_PACKET);
+			s->has_sent_EOF_packet = 1;
+			free(eof_packet);
+		}
+	} else //run in the sender mode
+	{
+		//same logic as lab 1
+	}
 }
 
-void
-rel_output (rel_t *r)
-{
+void rel_output(rel_t *r) {
 }
 
-void
-rel_timer ()
-{
-  /* Retransmit any packets that need to be retransmitted */
+void rel_timer() {
+	/* Retransmit any packets that need to be retransmitted */
 
 	// Loop through the last_sent_packets to check if anyone of the packets
 	// 	a. have not received an ack yet, and
@@ -180,15 +161,14 @@ rel_timer ()
 	// and perform slow start again
 }
 
-
 //////////////////////////////// Helper functions ///////////////////////////////
 packet_t * create_EOF_packet() {
 	packet_t* eof_packet = (packet_t *) malloc(sizeof(packet_t));
-	eof_packet -> len = SIZE_EOF_PACKET;
-	eof_packet -> ackno = 1;
-	eof_packet -> rwnd = 1;
-	eof_packet -> seqno = 0;
-	eof_packet -> cksum = computeChecksum(eof_packet, SIZE_EOF_PACKET);
+	eof_packet->len = SIZE_EOF_PACKET;
+	eof_packet->ackno = 1;
+	eof_packet->rwnd = 1;
+	eof_packet->seqno = 0;
+	eof_packet->cksum = computeChecksum(eof_packet, SIZE_EOF_PACKET);
 	return eof_packet;
 }
 
@@ -200,7 +180,7 @@ packet_t * create_EOF_packet() {
  * uint32_t rwnd;
  * uint32_t seqno; Only valid if length > 8
  * char data[1000];
-};
+ };
  */
 
 void convertToHostByteOrder(packet_t* packet) {
