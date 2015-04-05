@@ -83,6 +83,7 @@ struct sliding_window_receive * init_receiving_window();
 void destroy_sending_window(struct sliding_window_send*);
 void destory_receiving_window(struct sliding_window_receive*);
 void send_ack_pck(rel_t*, int);
+packet_t * create_EOF_packet();
 int isGreaterThan(struct timeval*, int);
 void send_data_pck(rel_t*, struct packet_node*, struct timeval*);
 
@@ -135,7 +136,7 @@ rel_create(conn_t *c, const struct sockaddr_storage *ss,
 	r->sending_window = init_sending_window();
 	r->receiving_window = init_receiving_window();
 
-	print_rel(r);
+	print_rel(r); // debug
 	return r;
 }
 
@@ -179,6 +180,10 @@ void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
 	if (isPacketCorrupted(pkt, n)) {
 		return; //check if corrupted
 	}
+
+	// print out packet content for debugging purpose
+	char buffer [1000];
+	print_pkt (pkt, buffer, sizeof(pkt));
 
 	convertToHostByteOrder(pkt); // convert to host byte order
 
@@ -581,11 +586,14 @@ packet_t *create_packet_from_conninput(rel_t *r) {
 	return packet;
 }
 /* Prepare for UDP
- * converts all necessary fields to network byte order
- * computes and writes the checksum to the cksum field
+ * 1. computes and writes the checksum to the cksum field
+ * 2. converts all necessary fields to network byte order
  */
 void prepareToTransmit(packet_t* packet) {
 	int packetLength = (int) (packet->len);
+	packet->cksum = computeChecksum(packet, packetLength);
+	assert(packet->cksum != 0);
+	convertToNetworkByteOrder(packet);
 	convertToNetworkByteOrder(packet);
 	packet->cksum = computeChecksum(packet, packetLength);
 }
@@ -594,6 +602,7 @@ void convertToNetworkByteOrder(packet_t *packet) {
 	if (packet->len != SIZE_ACK_PACKET) { /* if data packet, convert its seqno */
 		packet->seqno = htonl(packet->seqno);
 	}
+	packet->cksum = htons(packet->cksum);
 	packet->len = htons(packet->len);
 	packet->ackno = htonl(packet->ackno);
 }
@@ -604,12 +613,22 @@ void convertToHostByteOrder(packet_t* packet) {
 	}
 	packet->len = ntohs(packet->len);
 	packet->ackno = ntohl(packet->ackno);
+	packet->cksum = ntohs(packet->cksum);
 }
 
 // need to supply pktLength as the field might be network byte order already
 uint16_t computeChecksum(packet_t *packet, int packetLength) {
 	packet->cksum = 0;
 	return cksum(packet, packetLength);
+}
+
+packet_t * create_EOF_packet() {
+	packet_t* eof_packet = (packet_t *) malloc(sizeof(packet_t));
+	eof_packet -> len = SIZE_EOF_PACKET;
+	eof_packet -> ackno = 1;
+	eof_packet -> seqno = 0;
+	eof_packet -> cksum = computeChecksum(eof_packet, SIZE_EOF_PACKET);
+	return eof_packet;
 }
 
 /**
