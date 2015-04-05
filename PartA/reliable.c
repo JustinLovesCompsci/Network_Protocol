@@ -89,7 +89,7 @@ void send_data_pck(rel_t*, struct packet_node*, struct timeval*);
 
 int isPacketCorrupted(packet_t*, size_t);
 void convertToHostByteOrder(packet_t*);
-void processAckPacket(rel_t*, packet_t*);
+void process_ack(rel_t *, packet_t *);
 void processPacket(rel_t*, packet_t*);
 uint16_t getCheckSum(packet_t*, int);
 
@@ -98,6 +98,7 @@ struct packet_node* get_first_unacked_pck(rel_t*);
 packet_t *create_packet_from_conninput(rel_t *);
 void addCKAndConvertOrder(packet_t*);
 void convertToNetworkByteOrder(packet_t *);
+void appendPacketNodeToLastSent(rel_t *, struct packet_node*);
 
 /**
  * Creates a new reliable protocol session, returns NULL on failure.
@@ -178,19 +179,18 @@ void rel_demux(const struct config_common *cc,
  */
 void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
 	if (isPacketCorrupted(pkt, n)) {
-		return; //check if corrupted
+		return;
 	}
 
-	// print out packet content for debugging purpose
-	char buffer[1000];
-	print_pkt(pkt, buffer, sizeof(pkt));
-
-	convertToHostByteOrder(pkt); // convert to host byte order
+	if (debug) {
+		print_pkt(pkt, "packet", (int) pkt->len);
+	}
+	convertToHostByteOrder(pkt);
 
 	if (pkt->len == SIZE_ACK_PACKET) {
-		processAckPacket(r, pkt); // ack packet only, client side
+		process_ack(r, pkt); //client side
 	} else {
-		processPacket(r, pkt); // data packet, server side
+		processPacket(r, pkt); //server side
 	}
 }
 
@@ -239,10 +239,6 @@ void appendPacketNodeToLastSent(rel_t *r, struct packet_node* node) {
 	r->sending_window->last_packet_sent->next = node;
 	node->prev = r->sending_window->last_packet_sent;
 	r->sending_window->last_packet_sent = node;
-}
-
-void processAckPacket(rel_t* r, packet_t* pkt) {
-	process_ack(r, (packet_t*) pkt);
 }
 
 /* Server should process the data part of the packet
