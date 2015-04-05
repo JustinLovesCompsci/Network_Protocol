@@ -195,7 +195,6 @@ void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
  */
 void rel_read(rel_t *relState) {
 	if (relState->client_state == WAITING_INPUT_DATA) {
-		/* try to read from input and create a packet */
 		packet_t *packet = create_packet_from_conninput(relState);
 
 		/* in case there was data in the input and a packet was created, proceed to process, save
@@ -562,29 +561,24 @@ struct packet_node* get_first_unacked_pck(rel_t* r) {
  * 		 checkSum not computed here: to be computed right before packet is to be sent and converted to network order
  */
 packet_t *create_packet_from_conninput(rel_t *r) {
-	packet_t *packet;
-	packet = malloc(sizeof(*packet));
+	packet_t *packet = (packet_t*) malloc(sizeof(packet_t));
 
-//read one full packet's worth of data from input
+	/* read one full packet's worth of data from input */
 	int bytesRead = conn_input(r->c, packet->data, SIZE_MAX_PAYLOAD);
-
-	if (bytesRead == 0) // no inputt
-			{
+	if (bytesRead == 0) {
 		free(packet);
 		return NULL;
 	}
-// create a packet else if there's some data
+	/* create a packet else if there's some data */
 
-// if we read an EOF create a zero byte payload, else we read normal bytes that should be declared in the len field
+	/* if we read an EOF create a zero-byte payload, else we read normal bytes that should be declared in the len field */
 	packet->len =
 			(bytesRead == -1) ?
 					(uint16_t) SIZE_DATA_PCK_HEADER :
 					(uint16_t) (SIZE_DATA_PCK_HEADER + bytesRead);
-	packet->ackno = (uint32_t) 1; // not piggybacking acks, don't ack any packets
+	packet->ackno = (uint32_t) 1; /* not piggybacking acks, don't ack any packets */
 	packet->seqno = (uint32_t) (r->sending_window->seqno_last_packet_sent + 1);
-
 	return packet;
-
 }
 /* Prepare for UDP
  * converts all necessary fields to network byte order
