@@ -100,7 +100,6 @@ void convertToNetworkByteOrder(packet_t *);
 void create_and_send_ack_packet(rel_t *, uint32_t);
 
 /*helper for client */
-void save_outgoing_data_packet(rel_t *, packet_t *, int);
 struct ack_packet* createAckPacket(uint32_t);
 
 /**
@@ -216,7 +215,9 @@ void rel_read(rel_t *relState) {
 			conn_sendpkt(relState->c, packet, (size_t) packetLength);
 
 			/* keep record of the last packet sent */
-			save_outgoing_data_packet(relState, packet, packetLength);
+			relState->sending_window->last_packet_sent->next = packet;
+			relState->sending_window->seqno_last_packet_sent += 1;
+			relState->sending_window->lastTransmissionTime = gettimeofday(&(relState->sending_window->lastTransmissionTime), NULL); // keep track of the time of transmission
 
 			free(packet);
 		}
@@ -275,9 +276,9 @@ void process_data_packet(rel_t *r, packet_t *packet) {
 
 		/* if we received an EOF packet signal to conn_output and destroy the connection if appropriate */
 		if (packet->len == SIZE_EOF_PACKET) {
-			conn_output(r->c, NULL, 0);
+//			conn_output(r->c, NULL, 0); zihao part moved
 			r->server_state = SERVER_FINISHED;
-			create_and_send_ack_packet(r, packet->seqno + 1);
+//			create_and_send_ack_packet(r, packet->seqno + 1);
 
 			/* destroy the connection only if our client has finished transmitting */
 			if (r->client_state == CLIENT_FINISHED)
@@ -289,16 +290,15 @@ void process_data_packet(rel_t *r, packet_t *packet) {
 			uint32_t seqnoLastReceived =
 					r->receiving_window->last_packet_received->packet->seqno;
 			uint32_t seqnoLastRead = r->receiving_window->seqno_last_packet_read;
-			if (seqnoLastReceived - seqnoLastRead + 1 < r->config->window) {
+			int windowSize = r->config->window;
+
+			// keep track of last sent data
+			if ((seqnoLastReceived - seqnoLastRead + 1) < windowSize) {
 				r->receiving_window->last_packet_received->next = packet;
 			}
 			// system will handle sending ack
 
-			if (flush_payload_to_output(r)) {
-				create_and_send_ack_packet(r, packet->seqno + 1);
-				r->receiving_window->seqno_next_packet_expected = packet->seqno
-						+ 1;
-			} else {
+			//	TODO if server flush output succeeded, not change state, if flush data failed, change state to waiting to flush
 				r->server_state = WAITING_TO_FLUSH_DATA;
 			}
 		}
@@ -591,20 +591,6 @@ void convertToHostByteOrder(packet_t* packet) {
 uint16_t computeChecksum(packet_t *packet, int packetLength) {
 	packet->cksum = 0;
 	return cksum(packet, packetLength);
-}
-
-/*
- Client call only: Save a copy of the last packet if we need to retransmit.
- Note:
- a pointer to a packet is necessary
- fields are already in network byte order.
- */
-void save_outgoing_data_packet(rel_t *relState, packet_t *packet,
-		int packetLength) {
-	memcpy(&(relState->sending_window->last_packet_sent), packet, packetLength);
-	relState->sending_window->seqno_last_packet_sent = (size_t) packetLength;
-	relState->sending_window->seqno_last_packet_sent += 1;
-	gettimeofday(&(relState->sending_window->lastTransmissionTime), NULL); // keep track of the time of transmission
 }
 
 /**
