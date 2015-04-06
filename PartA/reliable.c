@@ -203,18 +203,18 @@ void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
 void rel_read(rel_t *relState) {
 //	printf("IN rel_read\n");
 	for (;;) {
-		if (is_sending_window_full(relState)) {
+		if (is_sending_window_full(relState) || relState->read_EOF_from_input) {
 			if (debug) {
-				printf("window size is full\n");
+				printf(
+						"window size is full or have already read EOF before from input\n");
 			}
 			return;
 		}
+
 		packet_t *packet = (packet_t*) malloc(sizeof(packet_t));
-
-		/* read one full packet's worth of data from input */
 		int bytesRead = conn_input(relState->c, packet->data, SIZE_MAX_PAYLOAD);
-		relState->read_EOF_from_input = 0;
 
+		relState->read_EOF_from_input = 0;
 		if (bytesRead == 0) { /* no data is read from conn_input */
 			free(packet);
 			if (debug) {
@@ -224,11 +224,6 @@ void rel_read(rel_t *relState) {
 		}
 
 		if (bytesRead == -1) { /* read EOF from conn_input */
-			if (relState->read_EOF_from_input) { /* have read EOF from input before, return without re-sending */
-				printf("re-read EOF from input\n");
-				free(packet);
-				return;
-			}
 			printf("read EOF from input\n");
 			relState->read_EOF_from_input = 1;
 			packet->len = (uint16_t) SIZE_EOF_PACKET;
@@ -291,8 +286,7 @@ void append_node_to_last_sent(rel_t *r, struct packet_node* node) {
  * append a packet node to the last of a receive sliding window
  */
 void append_node_to_last_received(rel_t *r, struct packet_node* node) {
-	printf("append node to last received with seqno %d\n", node->packet->seqno);
-
+//	printf("append node to last received with seqno %d\n", node->packet->seqno);
 	r->receiving_window->seqno_next_packet_expected = node->packet->seqno + 1;
 	if (r->receiving_window->last_packet_received == NULL) {
 		r->receiving_window->last_packet_received = node;
@@ -497,7 +491,8 @@ void print_sending_window(struct sliding_window_send * window) {
 
 void print_receiving_window(struct sliding_window_receive * window) {
 	if (debug) {
-		if (window == NULL) return;
+		if (window == NULL)
+			return;
 		printf("Printing receiving window related info....\n");
 		printf("Last packet read: %u, next packet expected: %u\n",
 				window->seqno_last_packet_outputted,
