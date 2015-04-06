@@ -171,6 +171,48 @@ void rel_demux(const struct config_common *cc,
 }
 
 void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
+	/* Check if packet is corrupted */
+	if (is_pkt_corrupted(pkt, n)) {
+		if (debug)
+			printf("Received a corrupted packet. \n");
+		return;
+	}
+
+	convert_to_host_order(pkt); /* from network to host byte order */
+
+	if (debug) {
+		printf("IN rel_recvpkt, print host-order non-corrupted packet: \n");
+		print_pkt(pkt, "packet", (int) pkt->len);
+	}
+
+	if (pkt->len == SIZE_ACK_PACKET) { /* ack packet */
+		assert(r->c->sender_receiver == RECEIVER);
+		/* Check if it's (triply) duplicated acks */
+		if (r->sending_window->seqno_last_packet_acked == pkt->ackno) {
+			r->num_duplicated_ack_received++;
+		} else {
+			r->num_duplicated_ack_received = 1;
+		}
+
+		if (r->num_duplicated_ack_received >= 3) {
+			r->ssthresh = (int) r->congestion_window / 2;
+			r->congestion_window = r->ssthresh;
+			// TODO: fast retransmission
+
+		} else {
+			r->congestion_window += 1/(r->congestion_window);
+			process_received_ack_pkt(r, pkt);
+		}
+
+	} else { /* data (including eof) packet */
+		process_received_ack_pkt(r, pkt);
+		process_received_data_pkt(r, pkt);
+	}
+//	if (pkt->len != SIZE_ACK_PACKET) { /* data packet */
+//		process_received_data_pkt(r, pkt);
+//	}
+//	process_received_ack_pkt(r, pkt); /* process both data and ack packet as Acks */
+
 	// TODO: If receive normal ack, first check if it is a triply duplicated ack. If not,
 	//	1. increment cwnd (cwnd = cwnd + 1/cwnd)
 	// 	2. set last ack no. and set duplicated_ack_counter to be 1
@@ -304,7 +346,6 @@ void process_received_data_pkt(rel_t *r, packet_t *packet) {
 
 	if (debug) {
 		printf("Start to process received data packet...\n");
-		//printf("Packet seqno: %d, expecting: %d\n", packet->seqno, r->receiving_window->seqno_next_packet_expected);
 	}
 
 	if (debug)
@@ -337,7 +378,6 @@ void process_received_data_pkt(rel_t *r, packet_t *packet) {
 		rel_output(r);
 	} else if (packet->seqno
 			< r->receiving_window->seqno_next_packet_expected) { /* receive a data packet with a seqno less than expected, resend previous ack */
-		//TODO: #11 Resending ACK
 		if (debug)
 			printf("sending ack with ackno %d\n",
 					r->receiving_window->seqno_next_packet_expected);
