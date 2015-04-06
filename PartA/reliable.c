@@ -91,16 +91,16 @@ int is_pkt_corrupted(packet_t*, size_t);
 void convert_to_host_order(packet_t*);
 void convert_to_network_order(packet_t*);
 void process_ack(rel_t *, packet_t *);
-void processPacket(rel_t*, packet_t*);
+void process_packet(rel_t*, packet_t*);
 uint16_t get_check_sum(packet_t*, int);
 
 struct packet_node* get_first_unread_pck(rel_t*);
 struct packet_node* get_first_unacked_pck(rel_t*);
 packet_t *create_packet_from_conninput(rel_t *);
 void add_ck_and_convert_order(packet_t*);
-void appendPacketNodeToLastSent(rel_t*, struct packet_node*);
+void append_node_to_last_sent(rel_t*, struct packet_node*);
 void process_received_data_pkt(rel_t*, packet_t*);
-void appendPacketNodeToLastReceived(rel_t*, struct packet_node*);
+void append_node_to_last_received(rel_t*, struct packet_node*);
 
 /**
  * Creates a new reliable protocol session, returns NULL on failure.
@@ -197,7 +197,7 @@ void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
 	if (pkt->len == SIZE_ACK_PACKET) {
 		process_ack(r, pkt); //client side
 	} else {
-		processPacket(r, pkt); //server side
+		process_packet(r, pkt); //server side
 	}
 }
 
@@ -232,7 +232,7 @@ void rel_read(rel_t *relState) {
 					sizeof(struct packet_node));
 			node->packet = packet;
 
-			appendPacketNodeToLastSent(relState, node);
+			append_node_to_last_sent(relState, node);
 			relState->sending_window->seqno_last_packet_sent = packet->seqno;
 			send_data_pck(relState, node, current_time);
 		}
@@ -242,7 +242,7 @@ void rel_read(rel_t *relState) {
 /**
  * append a packet node to the last of a sent sliding window
  */
-void appendPacketNodeToLastSent(rel_t *r, struct packet_node* node) {
+void append_node_to_last_sent(rel_t *r, struct packet_node* node) {
 	if (r->sending_window->last_packet_sent == NULL) {
 		r->sending_window->last_packet_sent = node;
 		node->next = NULL;
@@ -258,7 +258,7 @@ void appendPacketNodeToLastSent(rel_t *r, struct packet_node* node) {
 /**
  * append a packet node to the last of a sent sliding window
  */
-void appendPacketNodeToLastReceived(rel_t *r, struct packet_node* node) {
+void append_node_to_last_received(rel_t *r, struct packet_node* node) {
 	if (r->receiving_window->last_packet_received == NULL) {
 		r->receiving_window->last_packet_received = node;
 		node->next = NULL;
@@ -273,7 +273,7 @@ void appendPacketNodeToLastReceived(rel_t *r, struct packet_node* node) {
 
 /* Server should process the data part of the packet
  * client should process ack part of the packet. */
-void processPacket(rel_t* r, packet_t* pkt) {
+void process_packet(rel_t* r, packet_t* pkt) {
 	printf("Processing received packet\n");
 	/* Pass the packet to the server piece to process the data packet */
 	process_received_data_pkt(r, pkt);
@@ -332,7 +332,7 @@ void process_received_data_pkt(rel_t *r, packet_t *packet) {
 				struct packet_node* node = (struct packet_node*) malloc(
 						sizeof(struct packet_node));
 				node->packet = packet;
-				appendPacketNodeToLastReceived(r, node);
+				append_node_to_last_received(r, node);
 				r->receiving_window->seqno_next_packet_expected = packet->seqno
 						+ 1;
 			}
