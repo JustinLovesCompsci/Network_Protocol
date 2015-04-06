@@ -179,8 +179,10 @@ void rel_demux(const struct config_common *cc,
  */
 
 void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
-	if (debug)
+	if (debug) {
 		printf("IN rel_recvpkt\n");
+	}
+
 	if (is_pkt_corrupted(pkt, n)) {
 		if (debug)
 			printf("Received a packet that's corrupted. \n");
@@ -322,7 +324,6 @@ void process_received_ack_pkt(rel_t *r, packet_t *pkt) {
 	}
 
 	check_all_sent_pkts_acked(r);
-
 }
 
 /* called by receiver
@@ -367,6 +368,7 @@ void process_received_data_pkt(rel_t *r, packet_t *packet) {
 			< r->receiving_window->seqno_next_packet_expected) { /* receive a data packet with a seqno less than expected, resend previous ack */
 		//TODO: #11 Resending ACK
 		if (debug) printf("sending ack with ackno %d\n", r->receiving_window->seqno_next_packet_expected);
+
 		send_ack_pck(r, r->receiving_window->seqno_next_packet_expected);
 	}
 }
@@ -601,8 +603,9 @@ void send_ack_pck(rel_t* r, int ack_num) {
 	ack_pck->cksum = get_check_sum(ack_pck, SIZE_ACK_PACKET);
 	conn_sendpkt(r->c, ack_pck, SIZE_ACK_PACKET);
 	free(ack_pck);
-	if (debug)
+	if (debug) {
 		printf("Ack packet sent\n");
+	}
 }
 
 /**
