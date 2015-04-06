@@ -97,8 +97,9 @@ struct packet_node* get_first_unread_pck(rel_t*);
 struct packet_node* get_first_unacked_pck(rel_t*);
 packet_t *create_packet_from_conninput(rel_t *);
 void addCKAndConvertOrder(packet_t*);
-void convertToNetworkByteOrder(packet_t *);
-void appendPacketNodeToLastSent(rel_t *, struct packet_node*);
+void convertToNetworkByteOrder(packet_t*);
+void appendPacketNodeToLastSent(rel_t*, struct packet_node*);
+void process_data_packet(rel_t*, packet_t*);
 
 /**
  * Creates a new reliable protocol session, returns NULL on failure.
