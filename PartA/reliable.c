@@ -92,6 +92,7 @@ void process_received_ack_pkt(rel_t*, packet_t*);
 int is_EOF_pkt(packet_t*);
 int is_new_ACK(uint32_t, rel_t*);
 int is_all_sent_pkts_acked(rel_t*);
+struct timeval* get_current_time();
 
 /**
  * Creates a new reliable protocol session, returns NULL on failure.
@@ -214,6 +215,7 @@ void rel_read(rel_t *relState) {
 		/* read one full packet's worth of data from input */
 		int bytesRead = conn_input(relState->c, packet->data, SIZE_MAX_PAYLOAD);
 		relState->read_EOF_from_input = 0;
+
 		if (bytesRead == 0) { /* no data is read from conn_input */
 			free(packet);
 			if (debug) {
@@ -221,10 +223,12 @@ void rel_read(rel_t *relState) {
 			}
 			return;
 		}
+
 		if (bytesRead == -1) { /* read EOF from conn_input */
 			printf("read EOF from input\n");
 			relState->read_EOF_from_input = 1;
 			packet->len = (uint16_t) SIZE_EOF_PACKET;
+
 		} else { /* read some data from conn_input */
 			packet->len = (uint16_t) (SIZE_DATA_PCK_HEADER + bytesRead);
 		}
@@ -234,13 +238,6 @@ void rel_read(rel_t *relState) {
 		packet->seqno =
 				(uint32_t) (relState->sending_window->seqno_last_packet_sent + 1);
 
-		/* get current send time */
-		struct timeval* current_time = (struct timeval*) malloc(
-				sizeof(struct timeval));
-		if (gettimeofday(current_time, NULL) == -1) {
-			perror("Error generated from getting current time in rel_timer\n");
-		}
-
 		/* initialize packet node */
 		struct packet_node* node = (struct packet_node*) malloc(
 				sizeof(struct packet_node));
@@ -248,12 +245,22 @@ void rel_read(rel_t *relState) {
 
 		/* send the packet */
 		append_node_to_last_sent(relState, node);
+		struct timeval* current_time = get_current_time();
 		send_data_pck(relState, node, current_time);
 
 		if (try_finish_sender(relState)) {
 			return;
 		}
 	}
+}
+
+struct timeval* get_current_time() {
+	struct timeval* current_time = (struct timeval*) malloc(
+			sizeof(struct timeval));
+	if (gettimeofday(current_time, NULL) == -1) {
+		perror("Error generated from getting current time in rel_timer\n");
+	}
+	return current_time;
 }
 
 /**
@@ -420,13 +427,7 @@ void rel_timer() {
 		struct packet_node* node = get_first_unacked_pck(cur_rel);
 //		printf("check rel_timer()");
 		while (node) {
-			struct timeval* current_time = (struct timeval*) malloc(
-					sizeof(struct timeval));
-			if (gettimeofday(current_time, NULL) == -1) {
-				perror(
-						"Error generated from getting current time in rel_timer");
-			}
-
+			struct timeval* current_time = get_current_time();
 			struct timeval* diff = (struct timeval*) malloc(
 					sizeof(struct timeval));
 			timersub(current_time, node->time_sent, diff);
