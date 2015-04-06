@@ -175,7 +175,7 @@ void rel_demux(const struct config_common *cc,
 		const struct sockaddr_storage *ss, packet_t *pkt, size_t len) {
 }
 
-/*method called by both server and client, responsible for:
+/*method called by both server(sender) and client(receiver), responsible for:
  * 	checking checksum for checking corrupted data (drop if corrupted)
  * 	convert to host byte order
  * 	check if ack only or actual data included,
@@ -195,9 +195,9 @@ void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
 	}
 
 	if (pkt->len == SIZE_ACK_PACKET) {
-		process_ack(r, pkt); //client side
+		process_ack(r, pkt); //client(receiver) side
 	} else {
-		process_packet(r, pkt); //server side
+		process_packet(r, pkt); //server(sender) side
 	}
 }
 
@@ -312,7 +312,9 @@ void process_ack(rel_t *r, packet_t *packet) {
 void process_received_data_pkt(rel_t *r, packet_t *packet) {
 	//printf("Packet seqno: %d, expecting: %d\n", packet->seqno, r->receiving_window->seqno_next_packet_expected);
 
-	/* if receive the next in-order expected packet and we are waiting for data packets process the packet */
+	/* if receive the next in-order expected packet
+	 * and we are waiting for data packets process the packet */
+
 	if ((packet->seqno == r->receiving_window->seqno_next_packet_expected)
 			&& (r->receiver_state == WAITING_DATA_PACKET)) { //TODO: check if needed to do status check
 
