@@ -54,7 +54,7 @@ struct reliable_state {
 
 /* global variables */
 rel_t *rel_list;
-int debug = 1;
+int debug = 0;
 int read_EOF_from_sender = 0;
 int read_EOF_from_input = 0;
 int all_pkts_acked = 0;
@@ -313,6 +313,7 @@ void process_received_data_pkt(rel_t *r, packet_t *packet) {
 			append_node_to_last_received(r, node);
 			r->receiving_window->seqno_next_packet_expected = packet->seqno + 1;
 		}
+		rel_output(r);
 	}
 }
 
