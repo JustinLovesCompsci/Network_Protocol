@@ -15,6 +15,8 @@
 
 #include "rlib.h"
 
+int debug = 0;
+
 /* define constants */
 #define SIZE_ACK_PACKET 12 // size of an ack packet
 #define SIZE_EOF_PACKET 16
@@ -102,7 +104,6 @@ struct timeval* get_current_time();
 int try_end_connection(rel_t*);
 
 rel_t *rel_list;
-int debug = 0;
 
 /* Creates a new reliable protocol session, returns NULL on failure.
  * Exactly one of c and ss should be NULL.  (ss is NULL when called
@@ -131,17 +132,37 @@ rel_create(conn_t *c, const struct sockaddr_storage *ss,
 	r->ssthresh = INT_MAX;
 	r->congestion_window = 1;
 	r->num_duplicated_ack_received = 0;
-//	r->expected_ack = 1;
+	r->num_packets_last_sent = 0;
+
+	/* For receiver */
 	r->has_sent_EOF_packet = 0;
 
-	// NOTE: if server/receiver, send EOF packet to client. If client, start slow start.
+	/* same as 3a */
+	r->config = *cc;
+	r->sending_window = init_sending_window();
+	r->receiving_window = init_receiving_window();
+	r->read_EOF_from_input = 0;
+	r->read_EOF_from_sender = 0;
+	r->output_all_data = 0;
+	r->all_pkts_acked = 0;
+
 	return r;
 }
 
 void rel_destroy(rel_t *r) {
-	conn_destroy(r->c);
+//	conn_destroy(r->c);
 
 	/* Free any other allocated memory here */
+	if (debug)
+		printf("IN rel_destroy\n");
+
+	if (r->next) {
+		r->next->prev = r->prev;
+	}
+	*r->prev = r->next;
+	conn_destroy(r->c);
+
+	free(r);
 }
 
 void rel_demux(const struct config_common *cc,
