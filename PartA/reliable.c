@@ -54,7 +54,7 @@ struct reliable_state {
 
 /* global variables */
 rel_t *rel_list;
-int debug = 1;
+int debug = 0;
 int read_EOF_from_sender = 0;
 int read_EOF_from_input = 0;
 int all_pkts_acked = 0;
@@ -296,7 +296,7 @@ void process_received_data_pkt(rel_t *r, packet_t *packet) {
 		printf("Start to process received data packet");
 		//printf("Packet seqno: %d, expecting: %d\n", packet->seqno, r->receiving_window->seqno_next_packet_expected);
 	}
-
+	printf("Packet seqno: %d, expecting: %d\n", packet->seqno, r->receiving_window->seqno_next_packet_expected);
 	if ((packet->seqno == r->receiving_window->seqno_next_packet_expected)) {
 		/* seqno is the one expected next */
 		uint32_t seqnoLastReceived =
@@ -307,7 +307,7 @@ void process_received_data_pkt(rel_t *r, packet_t *packet) {
 				r->receiving_window->seqno_last_packet_outputted;
 		int windowSize = r->config.window;
 
-		//printf("seqnoLastReceived = %d, seqnoLastRead = %d, windowSize = %d\n", seqnoLastReceived, seqnoLastRead, windowSize);
+		printf("seqnoLastReceived = %d, seqnoLastRead = %d, windowSize = %d\n", seqnoLastReceived, seqno_last_outputted, windowSize);
 		/* update receive window for the newly arrived packet */
 		if ((seqnoLastReceived - seqno_last_outputted) < windowSize) {
 			struct packet_node* node = (struct packet_node*) malloc(
@@ -316,6 +316,7 @@ void process_received_data_pkt(rel_t *r, packet_t *packet) {
 			append_node_to_last_received(r, node);
 			r->receiving_window->seqno_next_packet_expected = packet->seqno + 1;
 		}
+		rel_output(r);
 	}
 }
 
@@ -339,15 +340,17 @@ void rel_output(rel_t *r) {
 	/* output data */
 	while (packet_ptr != NULL && free_space > 0) {
 		packet_t *current_pck = packet_ptr->packet;
-		//printf("packet data is: %s\n", current_pck->data);
+		assert(current_pck != NULL);
+//		printf("packet data is: %s\n", current_pck->data);
 		int bytesWritten = conn_output(c, current_pck->data,
 				current_pck->len - SIZE_DATA_PCK_HEADER);
-		//printf("bytes written: %d\n", bytesWritten);
+//		printf("bytes written: %d\n", bytesWritten);
 		if (bytesWritten < 0) {
 			perror(
 					"Error generated from conn_output for output a whole packet");
 		}
 
+		// Flushing successful, partially or completely
 		if (free_space > current_pck->len - SIZE_DATA_PCK_HEADER) { /* enough space to output a whole packet */
 			assert(bytesWritten == current_pck->len - SIZE_DATA_PCK_HEADER);
 			ackno_to_send = current_pck->seqno + 1;
@@ -381,6 +384,9 @@ void rel_output(rel_t *r) {
 void rel_timer() {
 //	printf("IN rel_timer\n");
 	rel_t* cur_rel = rel_list;
+//	if (cur_rel != NULL && cur_rel->receiving_window->last_packet_received != NULL) {
+//		printf("ddata: %s", cur_rel->receiving_window->last_packet_received->packet->data);
+//	}
 	while (cur_rel) {
 		struct packet_node* node = get_first_unacked_pck(cur_rel);
 		while (node) {
@@ -449,8 +455,8 @@ void print_receiving_window(struct sliding_window_receive * window) {
 				window->seqno_next_packet_expected);
 		struct packet_node * pack = window->last_packet_received;
 		while (pack) {
-			print_pkt(pack->packet, "packet", pack->packet->len);
-			pack = pack->next;
+			printf("Packet data: %s\n", pack->packet->data);
+			pack = pack->prev;
 		}
 	}
 }
