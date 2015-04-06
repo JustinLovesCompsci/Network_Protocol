@@ -65,6 +65,7 @@ void print_rel(rel_t *);
 void print_sending_window(struct sliding_window_send*);
 void print_receiving_window(struct sliding_window_receive*);
 void print_config(struct config_common);
+void print_pointers_in_receive_window(struct sliding_window_receive*, int);
 
 /* helper functions */
 struct sliding_window_send * init_sending_window();
@@ -171,7 +172,7 @@ void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
 	}
 
 	if (debug) {
-		printf("IN rel_recvpkt, print host-order non-corrupted packet: ");
+		printf("IN rel_recvpkt, print host-order non-corrupted packet: \n");
 		print_pkt(pkt, "packet", (int) pkt->len);
 	}
 
@@ -189,8 +190,7 @@ void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
 		}
 
 		if (r->sending_window->seqno_last_packet_acked
-				== r->sending_window->seqno_last_packet_sent) {
-			/* all packets sent so far have been acknowledged */
+				== r->sending_window->seqno_last_packet_sent) { /* check if all packets sent so far have been acknowledged */
 			all_pkts_acked = 1;
 			try_finish_sender(r);
 		} else {
@@ -278,6 +278,7 @@ void append_node_to_last_sent(rel_t *r, struct packet_node* node) {
  * append a packet node to the last of a receive sliding window
  */
 void append_node_to_last_received(rel_t *r, struct packet_node* node) {
+	printf("append node to last received with seqno %d\n", node->packet->seqno);
 	r->receiving_window->seqno_next_packet_expected = node->packet->seqno + 1;
 	if (r->receiving_window->last_packet_received == NULL) {
 		r->receiving_window->last_packet_received = node;
@@ -296,7 +297,7 @@ void append_node_to_last_received(rel_t *r, struct packet_node* node) {
  */
 void process_received_data_pkt(rel_t *r, packet_t *packet) {
 	if (debug) {
-		printf("Start to process received data packet");
+		printf("Start to process received data packet...\n");
 		//printf("Packet seqno: %d, expecting: %d\n", packet->seqno, r->receiving_window->seqno_next_packet_expected);
 	}
 	printf("Packet seqno: %d, expecting: %d\n", packet->seqno,
@@ -312,9 +313,7 @@ void process_received_data_pkt(rel_t *r, packet_t *packet) {
 		uint32_t seqno_last_outputted =
 				r->receiving_window->seqno_last_packet_outputted;
 		int windowSize = r->config.window;
-
-		printf("seqnoLastReceived = %d, seqnoLastRead = %d, windowSize = %d\n",
-				seqnoLastReceived, seqno_last_outputted, windowSize);
+		print_pointers_in_receive_window(r->receiving_window, r->config.window);
 
 		/* update receive window for the newly arrived packet */
 		if ((seqnoLastReceived - seqno_last_outputted) < windowSize) {
@@ -396,7 +395,9 @@ void rel_timer() {
 //	}
 	while (cur_rel) {
 		struct packet_node* node = get_first_unacked_pck(cur_rel);
+//		printf("check rel_timer()");
 		while (node) {
+//			printf("check packet node in timer");
 			struct timeval* current_time = (struct timeval*) malloc(
 					sizeof(struct timeval));
 			if (gettimeofday(current_time, NULL) == -1) {
@@ -466,6 +467,16 @@ void print_receiving_window(struct sliding_window_receive * window) {
 			pack = pack->prev;
 		}
 	}
+}
+
+void print_pointers_in_receive_window(struct sliding_window_receive * window,
+		int windowSize) {
+	uint32_t seqnoLastReceived =
+			window->last_packet_received == NULL ?
+					0 : window->last_packet_received->packet->seqno;
+	uint32_t seqno_last_outputted = window->seqno_last_packet_outputted;
+	printf("seqnoLastReceived = %d, seqnoLastRead = %d, windowSize = %d\n",
+			seqnoLastReceived, seqno_last_outputted, windowSize);
 }
 
 ////////////////////////////////////////////////////////////////////////
@@ -553,12 +564,13 @@ void send_data_pck(rel_t*r, struct packet_node* pkt_ptr,
 	packet->cksum = get_check_sum(packet, (int) packet->len);
 	assert(packet->cksum != 0);
 	if (debug) {
-		printf("IN send_data_pck, print host order packet");
+		printf("IN send_data_pck, print host order packet:\n");
 		print_pkt(packet, "packet", packet->len);
 	}
 	convert_to_network_order(packet);
 	conn_sendpkt(r->c, packet, pckLen);
 	pkt_ptr->time_sent = current_time;
+	convert_to_host_order(packet);
 }
 
 struct packet_node* get_first_unread_pck(rel_t* r) {
