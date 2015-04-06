@@ -215,10 +215,10 @@ void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
 void rel_read(rel_t *relState) {
 //	printf("IN rel_read\n");
 	for (;;) {
-//		if (is_sending_window_full(relState)) {
-//			printf("window size is full\n");
-//			return;
-//		}
+		if (is_sending_window_full(relState)) {
+			//printf("window size is full\n");
+			return;
+		}
 		packet_t *packet = (packet_t*) malloc(sizeof(packet_t));
 
 		/* read one full packet's worth of data from input */
