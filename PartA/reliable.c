@@ -236,7 +236,7 @@ void rel_read(rel_t *relState) {
 		} else { /* read some data from conn_input */
 			packet->len = (uint16_t) (SIZE_DATA_PCK_HEADER + bytesRead);
 		}
-
+//		printf("hey: %d\n", relState->receiving_window->seqno_last_packet_outputted);
 		packet->ackno = relState->receiving_window->seqno_last_packet_outputted
 				+ 1;
 		packet->seqno =
@@ -246,11 +246,14 @@ void rel_read(rel_t *relState) {
 		struct packet_node* node = (struct packet_node*) malloc(
 				sizeof(struct packet_node));
 		node->packet = packet;
-
+//		printf("here?\n");
+//		memcpy(node->packet, packet, sizeof(packet));
+//		printf("here!\n");
 		/* send the packet */
 		append_node_to_last_sent(relState, node);
 		struct timeval* current_time = get_current_time();
 		send_data_pck(relState, node, current_time);
+//		free(node);
 
 		if (try_end_connection(relState)) {
 			return;
@@ -289,6 +292,7 @@ void append_node_to_last_sent(rel_t *r, struct packet_node* node) {
  */
 void append_node_to_last_received(rel_t *r, struct packet_node* node) {
 	printf("append node to last received with seqno %d\n", node->packet->seqno);
+
 	r->receiving_window->seqno_next_packet_expected = node->packet->seqno + 1;
 	if (r->receiving_window->last_packet_received == NULL) {
 		r->receiving_window->last_packet_received = node;
@@ -343,10 +347,13 @@ void process_received_data_pkt(rel_t *r, packet_t *packet) {
 		print_pointers_in_receive_window(r->receiving_window, r->config.window);
 
 		/* update receive window for the newly arrived packet */
-		if ((seqnoLastReceived - seqno_last_outputted) <= windowSize) {
+		if ((seqnoLastReceived - seqno_last_outputted) < windowSize) {
 			struct packet_node* node = (struct packet_node*) malloc(
 					sizeof(struct packet_node));
-			node->packet = packet;
+			packet_t * pack = (packet_t *) malloc(sizeof(packet_t));
+//			node->packet = packet;
+			memcpy(pack, packet, sizeof(packet_t));
+			node->packet = pack;
 			append_node_to_last_received(r, node);
 		}
 		rel_output(r);
@@ -414,8 +421,10 @@ void rel_output(rel_t *r) {
 
 	/* send ack */
 	if (ackno_to_send > 1) {
+		//if (ackno_to_send != 3) {
 		send_ack_pck(r, ackno_to_send);
 		r->receiving_window->seqno_last_packet_outputted = ackno_to_send - 1;
+		//}
 	}
 	try_end_connection(r);
 }
@@ -488,6 +497,7 @@ void print_sending_window(struct sliding_window_send * window) {
 
 void print_receiving_window(struct sliding_window_receive * window) {
 	if (debug) {
+		if (window == NULL) return;
 		printf("Printing receiving window related info....\n");
 		printf("Last packet read: %u, next packet expected: %u\n",
 				window->seqno_last_packet_outputted,
