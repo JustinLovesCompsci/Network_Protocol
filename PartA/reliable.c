@@ -100,6 +100,7 @@ void addCKAndConvertOrder(packet_t*);
 void convertToNetworkByteOrder(packet_t*);
 void appendPacketNodeToLastSent(rel_t*, struct packet_node*);
 void process_data_packet(rel_t*, packet_t*);
+void appendPacketNodeToLastReceived(rel_t*, struct packet_node*);
 
 /**
  * Creates a new reliable protocol session, returns NULL on failure.
@@ -247,6 +248,15 @@ void appendPacketNodeToLastSent(rel_t *r, struct packet_node* node) {
 	r->sending_window->last_packet_sent = node;
 }
 
+/**
+ * append a packet node to the last of a sent sliding window
+ */
+void appendPacketNodeToLastReceived(rel_t *r, struct packet_node* node) {
+	r->receiving_window->last_packet_received->next = node;
+	node->prev = r->receiving_window->last_packet_received;
+	r->receiving_window->last_packet_received = node;
+}
+
 /* Server should process the data part of the packet
  * client should process ack part of the packet. */
 void processPacket(rel_t* r, packet_t* pkt) {
@@ -282,39 +292,35 @@ void process_ack(rel_t *r, packet_t *packet) {
 	}
 }
 
-/* This function processes a data packet.
- * This is functionality of the server piece. */
+/**
+ * This function processes a data packet.
+ * This is functionality of the server piece.
+ */
 void process_data_packet(rel_t *r, packet_t *packet) {
-	// if we receive a packet we have seen and processed before then just send an ack bacl regardless on which state the server is in
-
 	/* if we have received the next in-order packet we were expecting and we are waiting
 	 for data packets process the packet */
 	if ((packet->seqno == r->receiving_window->seqno_next_packet_expected)
-			&& (r->server_state == WAITING_DATA_PACKET)) { // check if needed to do status check
+			&& (r->server_state == WAITING_DATA_PACKET)) { //TODO: check if needed to do status check
 
 		/* if we received an EOF packet signal to conn_output and destroy the connection if appropriate */
 		if (packet->len == SIZE_EOF_PACKET) {
-//			conn_output(r->c, NULL, 0); zihao part moved
 			r->server_state = SERVER_FINISHED;
-//			create_and_send_ack_packet(r, packet->seqno + 1);
-
-			/* destroy the connection only if our client has finished transmitting */
-			if (r->client_state == CLIENT_FINISHED)
-				rel_destroy(r);
 		}
-		// we receive a non-EOF data packet, check receiving window size, and append
+		/* we receive a non-EOF data packet, check receiving window size, and append */
 		else {
-			//check if receiving window size less
 			uint32_t seqnoLastReceived =
 					r->receiving_window->last_packet_received->packet->seqno;
 			uint32_t seqnoLastRead = r->receiving_window->seqno_last_packet_read;
 			int windowSize = r->config.window;
 
-			// keep track of last sent data
+			/* update receive window for the newly arrived packet */
 			if ((seqnoLastReceived - seqnoLastRead + 1) < windowSize) {
-				r->receiving_window->last_packet_received->next = packet;
+				struct packet_node* node = (struct packet_node*) malloc(
+						sizeof(struct packet_node));
+				node->packet = packet;
+				appendNodeToLastReceived(r, node);
+				//r->receiving_window->seqno_next_packet_expected = packet->seqno + 1;
 			}
-			// system will handle sending ack
 
 			//	TODO if server flush output succeeded, not change state, if flush data failed, change state to waiting to flush
 			r->server_state = WAITING_TO_FLUSH_DATA;
