@@ -408,7 +408,7 @@ void rel_timer() {
 			struct timeval* diff = (struct timeval*) malloc(
 					sizeof(struct timeval));
 			timersub(current_time, node->time_sent, diff);
-			printf("diff is %d:%d\n", diff->tv_sec, diff->tv_usec);
+			//printf("diff is %d:%d\n", diff->tv_sec, diff->tv_usec);
 			if (is_greater_than(diff, cur_rel->config.timeout)) { /* Retransmit because exceeds timeout */
 				if (debug) {
 					printf("Found timeout packet and start to retransmit:");
