@@ -179,8 +179,10 @@ void rel_demux(const struct config_common *cc,
  */
 
 void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
-	if (debug)
+	if (debug) {
 		printf("IN rel_recvpkt\n");
+	}
+
 	if (is_pkt_corrupted(pkt, n)) {
 		if (debug)
 			printf("Received a packet that's corrupted. \n");
@@ -322,7 +324,6 @@ void process_received_ack_pkt(rel_t *r, packet_t *pkt) {
 	}
 
 	check_all_sent_pkts_acked(r);
-
 }
 
 /* called by receiver
