@@ -50,15 +50,16 @@ struct reliable_state {
 	struct config_common config;
 	struct sliding_window_send *sending_window;
 	struct sliding_window_receive *receiving_window;
+
+	int read_EOF_from_sender;
+	int read_EOF_from_input;
+	int all_pkts_acked;
+	int output_all_data;
 };
 
 /* global variables */
 rel_t *rel_list;
 int debug = 0;
-int read_EOF_from_sender = 0;
-int read_EOF_from_input = 0;
-int all_pkts_acked = 0;
-int output_all_data = 0;
 
 /* debug functions */
 void print_rel(rel_t *);
@@ -126,6 +127,10 @@ rel_create(conn_t *c, const struct sockaddr_storage *ss,
 	r->config = *cc;
 	r->sending_window = init_sending_window();
 	r->receiving_window = init_receiving_window();
+	r->read_EOF_from_input = 0;
+	r->read_EOF_from_sender = 0;
+	r->output_all_data = 0;
+	r->all_pkts_acked = 0;
 	//print_rel(r); // debug
 	return r;
 }
@@ -191,10 +196,10 @@ void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
 
 		if (r->sending_window->seqno_last_packet_acked
 				== r->sending_window->seqno_last_packet_sent) { /* check if all packets sent so far have been acknowledged */
-			all_pkts_acked = 1;
+			r->all_pkts_acked = 1;
 			try_finish_sender(r);
 		} else {
-			all_pkts_acked = 0;
+			r->all_pkts_acked = 0;
 		}
 
 	} else { /* data packet */
@@ -217,7 +222,7 @@ void rel_read(rel_t *relState) {
 
 		/* read one full packet's worth of data from input */
 		int bytesRead = conn_input(relState->c, packet->data, SIZE_MAX_PAYLOAD);
-		read_EOF_from_input = 0;
+		relState->read_EOF_from_input = 0;
 		if (bytesRead == 0) { /* no data is read from conn_input */
 			free(packet);
 			printf("no data is available at input now\n");
@@ -225,7 +230,7 @@ void rel_read(rel_t *relState) {
 		}
 		if (bytesRead == -1) { /* read EOF from conn_input */
 			printf("read EOF from input\n");
-			read_EOF_from_input = 1;
+			relState->read_EOF_from_input = 1;
 			packet->len = (uint16_t) SIZE_EOF_PACKET;
 		} else { /* read some data from conn_input */
 			packet->len = (uint16_t) (SIZE_DATA_PCK_HEADER + bytesRead);
@@ -361,7 +366,7 @@ void rel_output(rel_t *r) {
 			assert(bytesWritten == current_pck->len - SIZE_DATA_PCK_HEADER);
 			ackno_to_send = current_pck->seqno + 1;
 			if (current_pck->len == SIZE_EOF_PACKET) { /* EOF packet */
-				read_EOF_from_sender = 1;
+				r->read_EOF_from_sender = 1;
 			}
 			packet_ptr = packet_ptr->next;
 		} else { /* enough space to output only partial packet */
@@ -372,7 +377,7 @@ void rel_output(rel_t *r) {
 	}
 
 	if (packet_ptr == NULL) {
-		output_all_data = 1;
+		r->output_all_data = 1;
 	}
 
 	/* send ack */
@@ -630,16 +635,24 @@ packet_t * create_EOF_packet() {
 	return eof_packet;
 }
 
+/**
+ * destroy r if all sent packets are acked and read EOF from input
+ * return 1 if criteria met and destroyed successfully
+ */
 int try_finish_sender(rel_t* r) {
-	if (all_pkts_acked && read_EOF_from_input) {
+	if (r->all_pkts_acked && r->read_EOF_from_input) {
 		rel_destroy(r);
 		return 1;
 	}
 	return 0;
 }
 
+/**
+ * destroy r if outputted all data and read EOF from sender
+ * return 1 if criteria met and destroyed successfully
+ */
 int try_finish_receiver(rel_t* r) {
-	if (read_EOF_from_sender && output_all_data) {
+	if (r->read_EOF_from_sender && r->output_all_data) {
 		rel_destroy(r);
 		return 1;
 	}
