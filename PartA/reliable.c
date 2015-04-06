@@ -75,12 +75,10 @@ void send_ack_pck(rel_t*, int);
 packet_t* create_EOF_packet();
 int is_greater_than(struct timeval*, int);
 void send_data_pck(rel_t*, struct packet_node*, struct timeval*);
-
 int is_pkt_corrupted(packet_t*, size_t);
 void convert_to_host_order(packet_t*);
 void convert_to_network_order(packet_t*);
 uint16_t get_check_sum(packet_t*, int);
-
 struct packet_node* get_first_unread_pck(rel_t*);
 struct packet_node* get_first_unacked_pck(rel_t*);
 void append_node_to_last_sent(rel_t*, struct packet_node*);
@@ -222,7 +220,7 @@ void rel_read(rel_t *relState) {
 		read_EOF_from_input = 0;
 		if (bytesRead == 0) { /* no data is read from conn_input */
 			free(packet);
-			printf("no date is available at input now\n");
+			printf("no data is available at input now\n");
 			return;
 		}
 		if (bytesRead == -1) { /* read EOF from conn_input */
@@ -262,6 +260,7 @@ void rel_read(rel_t *relState) {
  * append a packet node to the last of a send sliding window
  */
 void append_node_to_last_sent(rel_t *r, struct packet_node* node) {
+	r->sending_window->seqno_last_packet_sent = node->packet->seqno;
 	if (r->sending_window->last_packet_sent == NULL) {
 		r->sending_window->last_packet_sent = node;
 		node->next = NULL;
@@ -272,7 +271,6 @@ void append_node_to_last_sent(rel_t *r, struct packet_node* node) {
 	node->prev = r->sending_window->last_packet_sent;
 	r->sending_window->last_packet_sent = node;
 	node->next = NULL;
-	r->sending_window->seqno_last_packet_sent = node->packet->seqno;
 }
 
 /**
@@ -307,6 +305,8 @@ void process_received_data_pkt(rel_t *r, packet_t *packet) {
 				r->receiving_window->last_packet_received == NULL ?
 						0 :
 						r->receiving_window->last_packet_received->packet->seqno;
+//		printf("lastReceived packet before update has: %s\n",
+//				r->receiving_window->last_packet_received->packet->data);
 		uint32_t seqno_last_outputted =
 				r->receiving_window->seqno_last_packet_outputted;
 		int windowSize = r->config.window;
@@ -589,7 +589,6 @@ void convert_to_network_order(packet_t *packet) {
 	if (packet->len != SIZE_ACK_PACKET) { /* if data packet, convert its seqno */
 		packet->seqno = htonl(packet->seqno);
 	}
-	packet->cksum = htons(packet->cksum);
 	packet->len = htons(packet->len);
 	packet->ackno = htonl(packet->ackno);
 }
@@ -600,9 +599,9 @@ void convert_to_host_order(packet_t* packet) {
 	}
 	packet->len = ntohs(packet->len);
 	packet->ackno = ntohl(packet->ackno);
-	packet->cksum = ntohs(packet->cksum);
 }
 
+/* return checksum in network byte order */
 uint16_t get_check_sum(packet_t *packet, int packetLength) {
 	packet->cksum = 0;
 	return cksum(packet, packetLength);
