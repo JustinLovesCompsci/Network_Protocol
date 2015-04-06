@@ -184,7 +184,7 @@ void rel_demux(const struct config_common *cc,
  */
 void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
 	printf("IN rel_recvpkt\n");
-	convert_to_host_order(pkt); // convert to host byte order
+	convert_to_host_order(pkt);
 	if (is_pkt_corrupted(pkt, n)) {
 		printf("Received a packet that's corrupted. \n");
 		return;
@@ -311,12 +311,17 @@ void process_ack(rel_t *r, packet_t *packet) {
  */
 void process_received_data_pkt(rel_t *r, packet_t *packet) {
 	//printf("Packet seqno: %d, expecting: %d\n", packet->seqno, r->receiving_window->seqno_next_packet_expected);
+
 	/* if receive the next in-order expected packet and we are waiting for data packets process the packet */
 	if ((packet->seqno == r->receiving_window->seqno_next_packet_expected)
 			&& (r->server_state == WAITING_DATA_PACKET)) { //TODO: check if needed to do status check
+
 		/* if we received an EOF packet signal to conn_output and destroy the connection if appropriate */
 		if (packet->len == SIZE_EOF_PACKET) {
 			r->server_state = SERVER_FINISHED;
+//			if (r->client_state == CLIENT_FINISHED) {
+//				rel_destory(r);
+//			}
 		}
 		/* we receive a non-EOF data packet, check receiving window size, and append */
 		else {
@@ -326,6 +331,7 @@ void process_received_data_pkt(rel_t *r, packet_t *packet) {
 							r->receiving_window->last_packet_received->packet->seqno;
 			uint32_t seqnoLastRead = r->receiving_window->seqno_last_packet_read;
 			int windowSize = r->config.window;
+
 			//printf("seqnoLastReceived = %d, seqnoLastRead = %d, windowSize = %d\n", seqnoLastReceived, seqnoLastRead, windowSize);
 			/* update receive window for the newly arrived packet */
 			if ((seqnoLastReceived - seqnoLastRead) < windowSize) {
