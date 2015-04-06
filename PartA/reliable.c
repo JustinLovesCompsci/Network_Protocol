@@ -47,7 +47,7 @@ struct sliding_window_send {
  * seqno_last_packet_expected refers to the next packet expected to be received (always one greater than seqno_last_packet_received
  */
 struct sliding_window_receive {
-	uint32_t seqno_last_packet_read; /* sequence number */
+	uint32_t seqno_last_packet_outputted; /* sequence number */
 	struct packet_node *last_packet_received; /* a doubly linked list of received packets */
 	uint32_t seqno_next_packet_expected; /* sequence number */
 };
@@ -328,7 +328,7 @@ void process_received_data_pkt(rel_t *r, packet_t *packet) {
 					r->receiving_window->last_packet_received == NULL ?
 							0 :
 							r->receiving_window->last_packet_received->packet->seqno;
-			uint32_t seqnoLastRead = r->receiving_window->seqno_last_packet_read;
+			uint32_t seqnoLastRead = r->receiving_window->seqno_last_packet_outputted;
 			int windowSize = r->config.window;
 
 			//printf("seqnoLastReceived = %d, seqnoLastRead = %d, windowSize = %d\n", seqnoLastReceived, seqnoLastRead, windowSize);
@@ -399,7 +399,7 @@ void rel_output(rel_t *r) {
 	/* send ack */
 	if (ackno_to_send > 1) {
 		send_ack_pck(r, ackno_to_send);
-		r->receiving_window->seqno_last_packet_read = ackno_to_send - 1;
+		r->receiving_window->seqno_last_packet_outputted = ackno_to_send - 1;
 	}
 }
 
@@ -474,7 +474,7 @@ void print_receiving_window(struct sliding_window_receive * window) {
 	if (debug) {
 		printf("Printing receiving window related info....\n");
 		printf("Last packet read: %u, next packet expected: %u\n",
-				window->seqno_last_packet_read,
+				window->seqno_last_packet_outputted,
 				window->seqno_next_packet_expected);
 		struct packet_node * pack = window->last_packet_received;
 		while (pack) {
@@ -500,7 +500,7 @@ struct sliding_window_receive * init_receiving_window() {
 	struct sliding_window_receive * window =
 			(struct sliding_window_receive *) malloc(
 					sizeof(struct sliding_window_receive));
-	window->seqno_last_packet_read = 0;
+	window->seqno_last_packet_outputted = 0;
 	window->seqno_next_packet_expected = INIT_SEQ_NUM;
 	window->last_packet_received = NULL;
 	return window;
@@ -576,7 +576,7 @@ struct packet_node* get_first_unread_pck(rel_t* r) {
 
 	while (packet_ptr) {
 		if (packet_ptr->packet->seqno
-				== r->receiving_window->seqno_last_packet_read + 1) {
+				== r->receiving_window->seqno_last_packet_outputted + 1) {
 			break;
 		}
 		packet_ptr = packet_ptr->prev;
