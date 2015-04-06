@@ -338,7 +338,7 @@ void process_received_data_pkt(rel_t *r, packet_t *packet) {
 		uint32_t seqno_last_outputted =
 				r->receiving_window->seqno_last_packet_outputted;
 		int windowSize = r->config.window;
-		print_pointers_in_receive_window(r->receiving_window, r->config.window);
+		print_pointers_in_receive_window(r->receiving_window, windowSize);
 
 		/* update receive window for the newly arrived packet */
 		if ((seqnoLastReceived - seqno_last_outputted) < windowSize) {
@@ -653,12 +653,12 @@ void convert_to_host_order(packet_t* packet) {
 	packet->ackno = ntohl(packet->ackno);
 }
 
-/* return checksum in network byte order
- * @author*/
+/**
+ * @param packet is in network byte order
+ * @return checksum in network byte order
+ */
 uint16_t get_check_sum(packet_t *packet, int packetLength) {
-//	packet->cksum = 0;
 	memset(&packet->cksum, 0, sizeof(packet->cksum));
-//	convert_to_host_order(packet);
 	return cksum(packet, packetLength);
 }
 
