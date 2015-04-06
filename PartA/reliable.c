@@ -159,7 +159,6 @@ void rel_destroy(rel_t *r) {
 	/* Free any other allocated memory here */
 	destroy_sending_window(r->sending_window);
 	destory_receiving_window(r->receiving_window);
-
 	free(r);
 }
 
@@ -191,6 +190,7 @@ void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
 	}
 
 	if (debug) {
+		printf("IN rel_recvpkt");
 		print_pkt(pkt, "packet", (int) pkt->len);
 	}
 
@@ -287,6 +287,8 @@ void process_packet(rel_t* r, packet_t* pkt) {
  *  belongs to the client and server piece
  */
 void process_ack(rel_t *r, packet_t *packet) {
+	printf("Start to process received ack packet");
+
 	/* proceed only if we are waiting for an ack */
 	if (r->sender_state == WAITING_ACK) {
 		/* received ack for last normal packet sent, go back to waiting for input
@@ -312,6 +314,7 @@ void process_ack(rel_t *r, packet_t *packet) {
  * Receive a data packet from client
  */
 void process_received_data_pkt(rel_t *r, packet_t *packet) {
+	printf("Start to process received data packet");
 	//printf("Packet seqno: %d, expecting: %d\n", packet->seqno, r->receiving_window->seqno_next_packet_expected);
 
 	/* if receive the next in-order expected packet and we are waiting for data packets process the packet */
@@ -573,6 +576,10 @@ void send_data_pck(rel_t*r, struct packet_node* pkt_ptr,
 	packet_t * packet = pkt_ptr->packet;
 	size_t pckLen = packet->len;
 	add_ck_and_convert_order(packet);
+	if (debug) {
+		printf("IN send_data_pck:");
+		print_pkt(packet, "packet", packet->len);
+	}
 	conn_sendpkt(r->c, packet, pckLen);
 	pkt_ptr->time_sent = current_time;
 }
