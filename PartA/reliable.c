@@ -141,7 +141,7 @@ rel_create(conn_t *c, const struct sockaddr_storage *ss,
 	r->receiving_window = init_receiving_window();
 	r->client_state = WAITING_INPUT_DATA;
 	r->server_state = WAITING_DATA_PACKET;
-	print_rel(r); // debug
+	//print_rel(r); // debug
 	return r;
 }
 
@@ -186,6 +186,7 @@ void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
 	printf("IN rel_recvpkt\n");
 	convertToHostByteOrder(pkt); // convert to host byte order
 	if (isPacketCorrupted(pkt, n)) {
+		printf("Received a packet that's corrupted. \n");
 		return;
 	}
 
@@ -209,7 +210,9 @@ void rel_read(rel_t *relState) {
 	if (relState->client_state == WAITING_INPUT_DATA) {
 		packet_t *packet = create_packet_from_conninput(relState);
 		assert(packet!=NULL);
-		print_pkt(packet, "packet", packet->len);
+//		print_pkt(packet, "packet", packet->len);
+//		printf("Packet size: %d\n", packet->len);
+//		printf("Packet cksum: %d\n", packet->cksum);
 		/* in case there was data in the input and a packet was created, proceed to process, save
 		 and send the packet */
 		if (packet != NULL) {
@@ -268,7 +271,7 @@ void appendPacketNodeToLastReceived(rel_t *r, struct packet_node* node) {
 /* Server should process the data part of the packet
  * client should process ack part of the packet. */
 void processPacket(rel_t* r, packet_t* pkt) {
-
+	printf("Processing received packet\n");
 	/* Pass the packet to the server piece to process the data packet */
 	process_received_data_pkt(r, pkt);
 
@@ -304,10 +307,11 @@ void process_ack(rel_t *r, packet_t *packet) {
  * Receive a data packet from client in the server side
  */
 void process_received_data_pkt(rel_t *r, packet_t *packet) {
+	printf("Inside this method\n");
 	/* if receive the next in-order expected packet and we are waiting for data packets process the packet */
 	if ((packet->seqno == r->receiving_window->seqno_next_packet_expected)
 			&& (r->server_state == WAITING_DATA_PACKET)) { //TODO: check if needed to do status check
-
+		printf("Inside this loop\n");
 		/* if we received an EOF packet signal to conn_output and destroy the connection if appropriate */
 		if (packet->len == SIZE_EOF_PACKET) {
 			r->server_state = SERVER_FINISHED;
@@ -522,12 +526,12 @@ int isGreaterThan(struct timeval* time1, int millisec2) {
  * Returns 1 if packet is corrupted and 0 if it is not.
  */
 int isPacketCorrupted(packet_t* packet, size_t pkt_length) {
-	int packetLength = (int) ntohs(packet->len);
+	//int packetLength = (int) ntohs(packet->len);
+	size_t packetLength = packet->len;
 	/* If we received fewer bytes than the packet's size declare corruption. */
 	if (pkt_length < (size_t) packetLength) {
 		return 1;
 	}
-
 	uint16_t expectedChecksum = packet->cksum;
 	uint16_t computedChecksum = getCheckSum(packet, packetLength);
 	return expectedChecksum != computedChecksum;
