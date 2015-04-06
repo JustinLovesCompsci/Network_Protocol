@@ -188,6 +188,10 @@ void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
 			r->sending_window->seqno_last_packet_acked = pkt->ackno - 1;
 		}
 
+		if (!is_sending_window_full(r)) {
+			rel_read(r);
+		}
+
 		if (r->sending_window->seqno_last_packet_acked
 				== r->sending_window->seqno_last_packet_sent) {
 			/* all packets sent so far have been acknowledged */
@@ -656,5 +660,5 @@ int try_finish_receiver(rel_t* r) {
 
 int is_sending_window_full(rel_t* r) {
 	return r->sending_window->seqno_last_packet_sent
-			- r->sending_window->seqno_last_packet_acked >= r->config->window;
+			- r->sending_window->seqno_last_packet_acked >= r->config.window;
 }
