@@ -93,6 +93,7 @@ int is_EOF_pkt(packet_t*);
 int is_new_ACK(uint32_t, rel_t*);
 int is_all_sent_pkts_acked(rel_t*);
 struct timeval* get_current_time();
+int try_end_connection(rel_t*);
 
 /**
  * Creates a new reliable protocol session, returns NULL on failure.
@@ -248,7 +249,7 @@ void rel_read(rel_t *relState) {
 		struct timeval* current_time = get_current_time();
 		send_data_pck(relState, node, current_time);
 
-		if (try_finish_sender(relState)) {
+		if (try_end_connection(relState)) {
 			return;
 		}
 	}
@@ -312,7 +313,7 @@ void process_received_ack_pkt(rel_t *r, packet_t *pkt) {
 
 	if (is_all_sent_pkts_acked(r)) {
 		printf("process_received_ack_pkt: all packets sent have been acked\n");
-		try_finish_sender(r);
+		try_end_connection(r);
 	}
 }
 
@@ -410,7 +411,7 @@ void rel_output(rel_t *r) {
 		send_ack_pck(r, ackno_to_send);
 		r->receiving_window->seqno_last_packet_outputted = ackno_to_send - 1;
 	}
-	try_finish_receiver(r);
+	try_end_connection(r);
 }
 
 /**
@@ -647,6 +648,15 @@ uint16_t get_check_sum(packet_t *packet, int packetLength) {
 	memset(&packet->cksum, 0, sizeof(packet->cksum));
 //	convert_to_host_order(packet);
 	return cksum(packet, packetLength);
+}
+
+int try_end_connection(rel_t* r) {
+	if (r->all_pkts_acked && r->read_EOF_from_input && r->read_EOF_from_sender
+			&& r->output_all_data) {
+		rel_destroy(r);
+		return 1;
+	}
+	return 0;
 }
 
 /**
