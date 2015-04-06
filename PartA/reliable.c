@@ -173,13 +173,13 @@ void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
 	}
 
 	if (debug) {
-		printf("IN rel_recvpkt, print host-order non-corrupted packet:");
+		printf("IN rel_recvpkt, print host-order non-corrupted packet: ");
 		print_pkt(pkt, "packet", (int) pkt->len);
 	}
 
 	if (pkt->len == SIZE_ACK_PACKET) { /* ACK packet */
 		if (debug) {
-			printf("Received ACK packet");
+			printf("Received ACK packet\n");
 		}
 		/* update last packet acked pointer in sending window */
 		if (pkt->ackno >= r->sending_window->seqno_last_packet_acked) {
@@ -212,7 +212,7 @@ void rel_read(rel_t *relState) {
 	printf("IN rel_read\n");
 	for (;;) {
 		if (is_sending_window_full(relState)) {
-			printf("window size is full");
+			printf("window size is full\n");
 			return;
 		}
 		packet_t *packet = (packet_t*) malloc(sizeof(packet_t));
@@ -221,11 +221,11 @@ void rel_read(rel_t *relState) {
 		read_EOF_from_input = 0;
 		if (bytesRead == 0) {
 			free(packet);
-			printf("no date is available at input now");
+			printf("no date is available at input now\n");
 			return;
 		}
 		if (bytesRead == -1) { /* read EOF from conn_input */
-			printf("read EOF from input");
+			printf("read EOF from input\n");
 			read_EOF_from_input = 1;
 			packet->len = (uint16_t) SIZE_EOF_PACKET;
 		} else {
@@ -239,7 +239,7 @@ void rel_read(rel_t *relState) {
 		struct timeval* current_time = (struct timeval*) malloc(
 				sizeof(struct timeval));
 		if (gettimeofday(current_time, NULL) == -1) {
-			perror("Error generated from getting current time in rel_timer");
+			perror("Error generated from getting current time in rel_timer\n");
 		}
 
 		struct packet_node* node = (struct packet_node*) malloc(
@@ -257,7 +257,7 @@ void rel_read(rel_t *relState) {
 }
 
 /**
- * append a packet node to the last of a sent sliding window
+ * append a packet node to the last of a send sliding window
  */
 void append_node_to_last_sent(rel_t *r, struct packet_node* node) {
 	if (r->sending_window->last_packet_sent == NULL) {
@@ -273,7 +273,7 @@ void append_node_to_last_sent(rel_t *r, struct packet_node* node) {
 }
 
 /**
- * append a packet node to the last of a sent sliding window
+ * append a packet node to the last of a receive sliding window
  */
 void append_node_to_last_received(rel_t *r, struct packet_node* node) {
 	if (r->receiving_window->last_packet_received == NULL) {
@@ -296,7 +296,8 @@ void process_received_data_pkt(rel_t *r, packet_t *packet) {
 		printf("Start to process received data packet");
 		//printf("Packet seqno: %d, expecting: %d\n", packet->seqno, r->receiving_window->seqno_next_packet_expected);
 	}
-	printf("Packet seqno: %d, expecting: %d\n", packet->seqno, r->receiving_window->seqno_next_packet_expected);
+	printf("Packet seqno: %d, expecting: %d\n", packet->seqno,
+			r->receiving_window->seqno_next_packet_expected);
 	if ((packet->seqno == r->receiving_window->seqno_next_packet_expected)) {
 		/* seqno is the one expected next */
 		uint32_t seqnoLastReceived =
@@ -307,7 +308,8 @@ void process_received_data_pkt(rel_t *r, packet_t *packet) {
 				r->receiving_window->seqno_last_packet_outputted;
 		int windowSize = r->config.window;
 
-		printf("seqnoLastReceived = %d, seqnoLastRead = %d, windowSize = %d\n", seqnoLastReceived, seqno_last_outputted, windowSize);
+		printf("seqnoLastReceived = %d, seqnoLastRead = %d, windowSize = %d\n",
+				seqnoLastReceived, seqno_last_outputted, windowSize);
 		/* update receive window for the newly arrived packet */
 		if ((seqnoLastReceived - seqno_last_outputted) < windowSize) {
 			struct packet_node* node = (struct packet_node*) malloc(
