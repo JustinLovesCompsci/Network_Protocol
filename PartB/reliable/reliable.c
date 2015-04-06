@@ -15,6 +15,8 @@
 
 #include "rlib.h"
 
+int debug = 0;
+
 /* define constants */
 #define SIZE_ACK_PACKET 12 // size of an ack packet
 #define SIZE_EOF_PACKET 16
@@ -109,7 +111,6 @@ int try_end_connection(rel_t*);
 void prepare_slow_start(rel_t*);
 
 rel_t *rel_list;
-int debug = 0;
 
 /* Creates a new reliable protocol session, returns NULL on failure.
  * Exactly one of c and ss should be NULL.  (ss is NULL when called
@@ -138,17 +139,37 @@ rel_create(conn_t *c, const struct sockaddr_storage *ss,
 	r->ssthresh = INT_MAX;
 	r->congestion_window = 1;
 	r->num_duplicated_ack_received = 0;
-//	r->expected_ack = 1;
+	r->num_packets_last_sent = 0;
+
+	/* For receiver */
 	r->has_sent_EOF_packet = 0;
 
-	// NOTE: if server/receiver, send EOF packet to client. If client, start slow start.
+	/* same as 3a */
+	r->config = *cc;
+	r->sending_window = init_sending_window();
+	r->receiving_window = init_receiving_window();
+	r->read_EOF_from_input = 0;
+	r->read_EOF_from_sender = 0;
+	r->output_all_data = 0;
+	r->all_pkts_acked = 0;
+
 	return r;
 }
 
 void rel_destroy(rel_t *r) {
-	conn_destroy(r->c);
+//	conn_destroy(r->c);
 
 	/* Free any other allocated memory here */
+	if (debug)
+		printf("IN rel_destroy\n");
+
+	if (r->next) {
+		r->next->prev = r->prev;
+	}
+	*r->prev = r->next;
+	conn_destroy(r->c);
+
+	free(r);
 }
 
 void rel_demux(const struct config_common *cc,
@@ -157,6 +178,48 @@ void rel_demux(const struct config_common *cc,
 }
 
 void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
+	/* Check if packet is corrupted */
+	if (is_pkt_corrupted(pkt, n)) {
+		if (debug)
+			printf("Received a corrupted packet. \n");
+		return;
+	}
+
+	convert_to_host_order(pkt); /* from network to host byte order */
+
+	if (debug) {
+		printf("IN rel_recvpkt, print host-order non-corrupted packet: \n");
+		print_pkt(pkt, "packet", (int) pkt->len);
+	}
+
+	if (pkt->len == SIZE_ACK_PACKET) { /* ack packet */
+		assert(r->c->sender_receiver == RECEIVER);
+		/* Check if it's (triply) duplicated acks */
+		if (r->sending_window->seqno_last_packet_acked == pkt->ackno) {
+			r->num_duplicated_ack_received++;
+		} else {
+			r->num_duplicated_ack_received = 1;
+		}
+
+		if (r->num_duplicated_ack_received >= 3) {
+			r->ssthresh = (int) r->congestion_window / 2;
+			r->congestion_window = r->ssthresh;
+			// TODO: fast retransmission
+
+		} else {
+			r->congestion_window += 1/(r->congestion_window);
+			process_received_ack_pkt(r, pkt);
+		}
+
+	} else { /* data (including eof) packet */
+		process_received_ack_pkt(r, pkt);
+		process_received_data_pkt(r, pkt);
+	}
+//	if (pkt->len != SIZE_ACK_PACKET) { /* data packet */
+//		process_received_data_pkt(r, pkt);
+//	}
+//	process_received_ack_pkt(r, pkt); /* process both data and ack packet as Acks */
+
 	// TODO: If receive normal ack, first check if it is a triply duplicated ack. If not,
 	//	1. increment cwnd (cwnd = cwnd + 1/cwnd)
 	// 	2. set last ack no. and set duplicated_ack_counter to be 1
@@ -172,19 +235,16 @@ void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
 void rel_read(rel_t *s) {
 	if (s->c->sender_receiver == RECEIVER) {
 
-		//if already sent EOF to the sender
-		//  return;
-		//else
-		//  send EOF to the sender
-
 		if (s->has_sent_EOF_packet == 1) {
 			return;
 		} else {
+
 //			packet_t * eof_packet = make_eof_packet();
 //			assert(sizeof(eof_packet) == SIZE_ACK_PACKET);
 //			conn_sendpkt(s->c, eof_packet, (size_t) SIZE_ACK_PACKET);
 //			s->has_sent_EOF_packet = 1;
 //			free(eof_packet);
+
 		}
 	} else //run in the sender mode
 	{
@@ -325,7 +385,6 @@ void process_received_data_pkt(rel_t *r, packet_t *packet) {
 
 	if (debug) {
 		printf("Start to process received data packet...\n");
-		//printf("Packet seqno: %d, expecting: %d\n", packet->seqno, r->receiving_window->seqno_next_packet_expected);
 	}
 
 	if (debug)
@@ -358,7 +417,6 @@ void process_received_data_pkt(rel_t *r, packet_t *packet) {
 		rel_output(r);
 	} else if (packet->seqno
 			< r->receiving_window->seqno_next_packet_expected) { /* receive a data packet with a seqno less than expected, resend previous ack */
-		//TODO: #11 Resending ACK
 		if (debug)
 			printf("sending ack with ackno %d\n",
 					r->receiving_window->seqno_next_packet_expected);
