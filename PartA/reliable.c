@@ -573,16 +573,16 @@ void send_data_pck(rel_t*r, struct packet_node* pkt_ptr,
 		struct timeval* current_time) {
 	packet_t * packet = pkt_ptr->packet;
 	size_t pckLen = packet->len;
-	if (debug) {
-		printf("IN send_data_pck, print host order packet:\n");
-		print_pkt(packet, "packet", packet->len);
-	}
 	convert_to_network_order(packet);
 	packet->cksum = get_check_sum(packet, pckLen);
 	assert(packet->cksum != 0);
 	conn_sendpkt(r->c, packet, pckLen);
 	pkt_ptr->time_sent = current_time;
 	convert_to_host_order(packet);
+	if (debug) {
+		printf("IN send_data_pck, print host order packet:\n");
+		print_pkt(packet, "packet", packet->len);
+	}
 }
 
 struct packet_node* get_first_unread_pck(rel_t* r) {
