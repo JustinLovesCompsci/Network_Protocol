@@ -207,17 +207,17 @@ void rel_read(rel_t *relState) {
 	if (relState->client_state == WAITING_INPUT_DATA) {
 		packet_t *packet = create_packet_from_conninput(relState);
 		assert(packet!=NULL);
+		print_pkt(packet, "packet", packet->len);
 		/* in case there was data in the input and a packet was created, proceed to process, save
 		 and send the packet */
 		if (packet != NULL) {
 			int packetLength = packet->len;
-
+			assert(packetLength >= SIZE_ACK_PACKET);
 			/* change client state according to whether we are sending EOF packet or normal packet */
 			relState->client_state =
 					(packetLength == SIZE_EOF_PACKET) ?
 					WAITING_EOF_ACK :
 														WAITING_ACK;
-
 			/* get current send time */
 			struct timeval* current_time = (struct timeval*) malloc(
 					sizeof(struct timeval));
@@ -241,6 +241,10 @@ void rel_read(rel_t *relState) {
  * append a packet node to the last of a sent sliding window
  */
 void appendPacketNodeToLastSent(rel_t *r, struct packet_node* node) {
+	if (r->sending_window->last_packet_sent == NULL) {
+		r->sending_window->last_packet_sent = node;
+		return;
+	}
 	r->sending_window->last_packet_sent->next = node;
 	node->prev = r->sending_window->last_packet_sent;
 	r->sending_window->last_packet_sent = node;
@@ -597,7 +601,6 @@ packet_t *create_packet_from_conninput(rel_t *r) {
 					(uint16_t) (SIZE_DATA_PCK_HEADER + bytesRead);
 	packet->ackno = (uint32_t) 1; /* not piggybacking acks, don't ack any packets */
 	packet->seqno = (uint32_t) (r->sending_window->seqno_last_packet_sent + 1);
-	printf("packet length: %d\n", packet->len);
 	return packet;
 }
 /* Prepare for sending UDP packet
