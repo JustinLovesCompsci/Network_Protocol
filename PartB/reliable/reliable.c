@@ -207,7 +207,7 @@ void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
 			// TODO: fast retransmission
 
 		} else {
-			r->congestion_window += 1/(r->congestion_window);
+			r->congestion_window += 1 / (r->congestion_window);
 			process_received_ack_pkt(r, pkt);
 		}
 
