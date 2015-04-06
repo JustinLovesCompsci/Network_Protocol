@@ -191,7 +191,7 @@ void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
 	}
 
 	if (debug) {
-		print_pkt(pkt, "packet", (int) pkt->len);
+		//print_pkt(pkt, "packet", (int) pkt->len);
 	}
 
 	if (pkt->len == SIZE_ACK_PACKET) {
@@ -233,6 +233,9 @@ void rel_read(rel_t *relState) {
 			node->packet = packet;
 
 			append_node_to_last_sent(relState, node);
+//			if (relState->receiving_window->last_packet_received != NULL) {
+//				printf("data4: %s\n", relState->receiving_window->last_packet_received->packet->data);
+//			}
 			relState->sending_window->seqno_last_packet_sent = packet->seqno;
 			send_data_pck(relState, node, current_time);
 		}
@@ -310,12 +313,14 @@ void process_ack(rel_t *r, packet_t *packet) {
  * Receive a data packet from client in the server side
  */
 void process_received_data_pkt(rel_t *r, packet_t *packet) {
-	//printf("Packet seqno: %d, expecting: %d\n", packet->seqno, r->receiving_window->seqno_next_packet_expected);
-
+	printf("Packet seqno: %d, expecting: %d\n", packet->seqno, r->receiving_window->seqno_next_packet_expected);
+	if (r->receiving_window->last_packet_received != NULL) {
+		printf("data3: %s\n", r->receiving_window->last_packet_received->packet->data);
+	}
 	/* if receive the next in-order expected packet and we are waiting for data packets process the packet */
 	if ((packet->seqno == r->receiving_window->seqno_next_packet_expected)
 			&& (r->server_state == WAITING_DATA_PACKET)) { //TODO: check if needed to do status check
-
+		printf("hey I'm here\n");
 		/* if we received an EOF packet signal to conn_output and destroy the connection if appropriate */
 		if (packet->len == SIZE_EOF_PACKET) {
 			r->server_state = SERVER_FINISHED;
@@ -325,6 +330,10 @@ void process_received_data_pkt(rel_t *r, packet_t *packet) {
 		}
 		/* we receive a non-EOF data packet, check receiving window size, and append */
 		else {
+			if (r->receiving_window->last_packet_received != NULL) {
+				printf("data: %s\n", r->receiving_window->last_packet_received->packet->data);
+			}
+
 			uint32_t seqnoLastReceived =
 					r->receiving_window->last_packet_received == NULL ?
 							0 :
@@ -332,13 +341,14 @@ void process_received_data_pkt(rel_t *r, packet_t *packet) {
 			uint32_t seqnoLastRead = r->receiving_window->seqno_last_packet_read;
 			int windowSize = r->config.window;
 
-			//printf("seqnoLastReceived = %d, seqnoLastRead = %d, windowSize = %d\n", seqnoLastReceived, seqnoLastRead, windowSize);
+			printf("seqnoLastReceived = %d, seqnoLastRead = %d, windowSize = %d\n", seqnoLastReceived, seqnoLastRead, windowSize);
 			/* update receive window for the newly arrived packet */
 			if ((seqnoLastReceived - seqnoLastRead) < windowSize) {
 				struct packet_node* node = (struct packet_node*) malloc(
 						sizeof(struct packet_node));
 				node->packet = packet;
 				append_node_to_last_received(r, node);
+				printf("data2: %s\n", r->receiving_window->last_packet_received->packet->data);
 				r->receiving_window->seqno_next_packet_expected = packet->seqno
 						+ 1;
 			}
@@ -379,6 +389,8 @@ void rel_output(rel_t *r) {
 					"Error generated from conn_output for output a whole packet");
 		}
 
+		// Flushing successful, partially or completely
+		r->server_state = WAITING_DATA_PACKET;
 		if (free_space > current_pck->len - SIZE_DATA_PCK_HEADER) { /* enough space to output a whole packet */
 			assert(bytesWritten == current_pck->len - SIZE_DATA_PCK_HEADER);
 			ackno_to_send = current_pck->seqno + 1;
@@ -409,8 +421,11 @@ void rel_output(rel_t *r) {
  * @author Justin (Zihao) Zhang
  */
 void rel_timer() {
-	//printf("IN rel_timer\n");
+	printf("IN rel_timer\n");
 	rel_t* cur_rel = rel_list;
+	if (cur_rel != NULL && cur_rel->receiving_window->last_packet_received != NULL) {
+		printf("ddata: %s", cur_rel->receiving_window->last_packet_received->packet->data);
+	}
 	while (cur_rel) {
 		struct packet_node* node = get_first_unacked_pck(cur_rel);
 		while (node) {
@@ -427,7 +442,7 @@ void rel_timer() {
 			if (is_greater_than(diff, cur_rel->config.timeout)) { /* Retransmit because exceeds timeout */
 				if (debug) {
 					printf("Found timeout packet and start to retransmit");
-					print_pkt(node->packet, "packet", node->packet->len);
+					//print_pkt(node->packet, "packet", node->packet->len);
 				}
 				send_data_pck(cur_rel, node, current_time);
 			}
@@ -587,6 +602,7 @@ struct packet_node* get_first_unread_pck(rel_t* r) {
 		}
 		packet_ptr = packet_ptr->prev;
 	}
+	printf("data1.5: %s\n", r->receiving_window->last_packet_received->packet->data);
 	return packet_ptr;
 }
 
@@ -611,7 +627,7 @@ struct packet_node* get_first_unacked_pck(rel_t* r) {
  */
 packet_t *create_packet_from_conninput(rel_t *r) {
 	packet_t *packet = (packet_t*) malloc(sizeof(packet_t));
-
+	memset(&packet->data, 0,sizeof(packet->data));
 	/* read one full packet's worth of data from input */
 	int bytesRead = conn_input(r->c, packet->data, SIZE_MAX_PAYLOAD);
 	if (bytesRead == 0) {
