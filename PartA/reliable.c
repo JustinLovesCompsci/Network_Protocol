@@ -216,10 +216,11 @@ void rel_read(rel_t *relState) {
 			return;
 		}
 		packet_t *packet = (packet_t*) malloc(sizeof(packet_t));
+
 		/* read one full packet's worth of data from input */
 		int bytesRead = conn_input(relState->c, packet->data, SIZE_MAX_PAYLOAD);
 		read_EOF_from_input = 0;
-		if (bytesRead == 0) {
+		if (bytesRead == 0) { /* no data is read from conn_input */
 			free(packet);
 			printf("no date is available at input now\n");
 			return;
@@ -228,9 +229,10 @@ void rel_read(rel_t *relState) {
 			printf("read EOF from input\n");
 			read_EOF_from_input = 1;
 			packet->len = (uint16_t) SIZE_EOF_PACKET;
-		} else {
+		} else { /* read some data from conn_input */
 			packet->len = (uint16_t) (SIZE_DATA_PCK_HEADER + bytesRead);
 		}
+
 		packet->ackno = (uint32_t) 1; /* not piggybacking acks, don't ack any packets */
 		packet->seqno =
 				(uint32_t) (relState->sending_window->seqno_last_packet_sent + 1);
@@ -245,9 +247,9 @@ void rel_read(rel_t *relState) {
 		struct packet_node* node = (struct packet_node*) malloc(
 				sizeof(struct packet_node));
 		node->packet = packet;
+
 		/* send the packet */
 		append_node_to_last_sent(relState, node);
-		relState->sending_window->seqno_last_packet_sent = packet->seqno;
 		send_data_pck(relState, node, current_time);
 
 		if (try_finish_sender(relState)) {
@@ -270,6 +272,7 @@ void append_node_to_last_sent(rel_t *r, struct packet_node* node) {
 	node->prev = r->sending_window->last_packet_sent;
 	r->sending_window->last_packet_sent = node;
 	node->next = NULL;
+	r->sending_window->seqno_last_packet_sent = node->packet->seqno;
 }
 
 /**
