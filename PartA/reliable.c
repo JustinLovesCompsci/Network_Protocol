@@ -248,10 +248,10 @@ void rel_read(rel_t *relState) {
 		/* initialize packet node */
 		struct packet_node* node = (struct packet_node*) malloc(
 				sizeof(struct packet_node));
-		node->packet = packet;
-//		printf("here?\n");
-//		memcpy(node->packet, packet, sizeof(packet));
-//		printf("here!\n");
+//		node->packet = packet;
+		packet_t * pack = (packet_t *) malloc(sizeof(packet_t));
+		memcpy(pack, packet, sizeof(packet_t));
+		node->packet = pack;
 		/* send the packet */
 		append_node_to_last_sent(relState, node);
 		struct timeval* current_time = get_current_time();
@@ -367,6 +367,8 @@ void process_received_data_pkt(rel_t *r, packet_t *packet) {
 	} else if (packet->seqno
 			< r->receiving_window->seqno_next_packet_expected) { /* receive a data packet with a seqno less than expected, resend previous ack */
 		//TODO: #11 Resending ACK
+		printf("sending ack with ackno %d\n", r->receiving_window->seqno_next_packet_expected);
+		send_ack_pck(r, r->receiving_window->seqno_next_packet_expected);
 	}
 }
 
