@@ -694,6 +694,7 @@ int is_sending_window_full(rel_t* r) {
 			- r->sending_window->seqno_last_packet_acked >= r->config.window;
 }
 
+// TODO: find other way to tell EOF besides SIZE_EOF_PACKET
 int is_EOF_pkt(packet_t* pkt) {
 //	return pkt->len == SIZE_EOF_PACKETs && strlen(pkt->data) == 0;
 	return pkt->len == SIZE_EOF_PACKET;
