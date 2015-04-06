@@ -74,7 +74,6 @@ struct sliding_window_receive * init_receiving_window();
 void destroy_sending_window(struct sliding_window_send*);
 void destory_receiving_window(struct sliding_window_receive*);
 void send_ack_pck(rel_t*, int);
-packet_t* create_EOF_packet();
 int is_greater_than(struct timeval*, int);
 void send_data_pck(rel_t*, struct packet_node*, struct timeval*);
 int is_pkt_corrupted(packet_t*, size_t);
@@ -216,7 +215,9 @@ void rel_read(rel_t *relState) {
 //	printf("IN rel_read\n");
 	for (;;) {
 		if (is_sending_window_full(relState)) {
-			//printf("window size is full\n");
+			if (debug) {
+				printf("window size is full\n");
+			}
 			return;
 		}
 		packet_t *packet = (packet_t*) malloc(sizeof(packet_t));
@@ -226,7 +227,9 @@ void rel_read(rel_t *relState) {
 		relState->read_EOF_from_input = 0;
 		if (bytesRead == 0) { /* no data is read from conn_input */
 			free(packet);
-			printf("no data is available at input now\n");
+			if (debug) {
+				printf("no data is available at input now\n");
+			}
 			return;
 		}
 		if (bytesRead == -1) { /* read EOF from conn_input */
@@ -237,7 +240,8 @@ void rel_read(rel_t *relState) {
 			packet->len = (uint16_t) (SIZE_DATA_PCK_HEADER + bytesRead);
 		}
 
-		packet->ackno = (uint32_t) 1; /* not piggybacking acks, don't ack any packets */
+		packet->ackno = relState->receiving_window->seqno_last_packet_outputted
+				+ 1;
 		packet->seqno =
 				(uint32_t) (relState->sending_window->seqno_last_packet_sent + 1);
 
@@ -629,15 +633,6 @@ uint16_t get_check_sum(packet_t *packet, int packetLength) {
 	memset(&packet->cksum, 0, sizeof(packet->cksum));
 //	convert_to_host_order(packet);
 	return cksum(packet, packetLength);
-}
-
-packet_t * create_EOF_packet() {
-	packet_t* eof_packet = (packet_t *) malloc(sizeof(packet_t));
-	eof_packet->len = SIZE_EOF_PACKET;
-	eof_packet->ackno = 1;
-	eof_packet->seqno = 0;
-	eof_packet->cksum = get_check_sum(eof_packet, SIZE_EOF_PACKET);
-	return eof_packet;
 }
 
 /**
