@@ -90,6 +90,8 @@ int try_finish_receiver(rel_t*);
 int is_sending_window_full(rel_t*);
 void process_received_ack_pkt(rel_t*, packet_t*);
 int is_EOF_pkt(packet_t*);
+int is_new_ACK(uint32_t, rel_t*);
+int is_all_sent_pkts_acked(rel_t*);
 
 /**
  * Creates a new reliable protocol session, returns NULL on failure.
@@ -293,21 +295,17 @@ void process_received_ack_pkt(rel_t *r, packet_t *pkt) {
 	if (debug) {
 		printf("Received ACK packet\n");
 	}
-	/* update last packet acked pointer in sending window */
-	if (pkt->ackno > r->sending_window->seqno_last_packet_acked) {
+	/* update last packet acked pointer in sending window if new ack arrives */
+	if (is_new_ACK(pkt->ackno, r)) {
 		r->sending_window->seqno_last_packet_acked = pkt->ackno - 1;
+		if (!is_sending_window_full(r)) {
+			rel_read(r);
+		}
 	}
 
-	if (!is_sending_window_full(r)) {
-		rel_read(r);
-	}
-
-	if (r->sending_window->seqno_last_packet_acked
-			== r->sending_window->seqno_last_packet_sent) { /* check if all packets sent so far have been acknowledged */
-		r->all_pkts_acked = 1;
+	if (is_all_sent_pkts_acked(r)) {
+		printf("process_received_ack_pkt: all packets sent have been acked\n");
 		try_finish_sender(r);
-	} else {
-		r->all_pkts_acked = 0;
 	}
 }
 
@@ -682,4 +680,14 @@ int is_sending_window_full(rel_t* r) {
 int is_EOF_pkt(packet_t* pkt) {
 //	return pkt->len == SIZE_EOF_PACKETs && strlen(pkt->data) == 0;
 	return pkt->len == SIZE_EOF_PACKET;
+}
+
+int is_new_ACK(uint32_t ackno, rel_t* r) {
+	return ackno > r->sending_window->seqno_last_packet_acked + 1;
+}
+
+int is_all_sent_pkts_acked(rel_t* r) {
+	r->all_pkts_acked = r->sending_window->seqno_last_packet_acked
+			== r->sending_window->seqno_last_packet_sent;
+	return r->all_pkts_acked;
 }
