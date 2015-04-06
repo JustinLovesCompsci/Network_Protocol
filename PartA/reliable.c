@@ -99,7 +99,7 @@ packet_t *create_packet_from_conninput(rel_t *);
 void addCKAndConvertOrder(packet_t*);
 void convertToNetworkByteOrder(packet_t*);
 void appendPacketNodeToLastSent(rel_t*, struct packet_node*);
-void process_data_packet(rel_t*, packet_t*);
+void process_received_data_pkt(rel_t*, packet_t*);
 void appendPacketNodeToLastReceived(rel_t*, struct packet_node*);
 
 /**
@@ -256,6 +256,10 @@ void appendPacketNodeToLastSent(rel_t *r, struct packet_node* node) {
  * append a packet node to the last of a sent sliding window
  */
 void appendPacketNodeToLastReceived(rel_t *r, struct packet_node* node) {
+	if (r->receiving_window->last_packet_received == NULL) {
+		r->receiving_window->last_packet_received = node;
+		return;
+	}
 	r->receiving_window->last_packet_received->next = node;
 	node->prev = r->receiving_window->last_packet_received;
 	r->receiving_window->last_packet_received = node;
@@ -266,7 +270,7 @@ void appendPacketNodeToLastReceived(rel_t *r, struct packet_node* node) {
 void processPacket(rel_t* r, packet_t* pkt) {
 
 	/* Pass the packet to the server piece to process the data packet */
-	process_data_packet(r, pkt);
+	process_received_data_pkt(r, pkt);
 
 	/* Pass the packet to the client piece to process the ackno field */
 	process_ack(r, pkt);
@@ -297,12 +301,10 @@ void process_ack(rel_t *r, packet_t *packet) {
 }
 
 /**
- * This function processes a data packet.
- * This is functionality of the server piece.
+ * Receive a data packet from client in the server side
  */
-void process_data_packet(rel_t *r, packet_t *packet) {
-	/* if we have received the next in-order packet we were expecting and we are waiting
-	 for data packets process the packet */
+void process_received_data_pkt(rel_t *r, packet_t *packet) {
+	/* if receive the next in-order expected packet and we are waiting for data packets process the packet */
 	if ((packet->seqno == r->receiving_window->seqno_next_packet_expected)
 			&& (r->server_state == WAITING_DATA_PACKET)) { //TODO: check if needed to do status check
 
@@ -322,8 +324,9 @@ void process_data_packet(rel_t *r, packet_t *packet) {
 				struct packet_node* node = (struct packet_node*) malloc(
 						sizeof(struct packet_node));
 				node->packet = packet;
-				appendNodeToLastReceived(r, node);
-				//r->receiving_window->seqno_next_packet_expected = packet->seqno + 1;
+				appendPacketNodeToLastReceived(r, node);
+				r->receiving_window->seqno_next_packet_expected = packet->seqno
+						+ 1;
 			}
 
 			//	TODO if server flush output succeeded, not change state, if flush data failed, change state to waiting to flush
