@@ -169,7 +169,7 @@ void rel_demux(const struct config_common *cc,
  * @author Justin (Zihao) Zhang
  */
 void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
-//	printf("IN rel_recvpkt\n");
+	printf("IN rel_recvpkt\n");
 	if (is_pkt_corrupted(pkt, n)) {
 		printf("Received a packet that's corrupted. \n");
 		return;
@@ -182,10 +182,10 @@ void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
 		print_pkt(pkt, "packet", (int) pkt->len);
 	}
 
-	process_received_ack_pkt(r, pkt); /* regard both data and ack packet as Acks */
 	if (pkt->len != SIZE_ACK_PACKET) { /* data packet */
 		process_received_data_pkt(r, pkt);
 	}
+	process_received_ack_pkt(r, pkt); /* regard both data and ack packet as Acks */
 }
 
 /**
@@ -315,8 +315,8 @@ void process_received_data_pkt(rel_t *r, packet_t *packet) {
 	}
 	printf("Packet seqno: %d, expecting: %d\n", packet->seqno,
 			r->receiving_window->seqno_next_packet_expected);
-	if ((packet->seqno == r->receiving_window->seqno_next_packet_expected)) {
-		/* seqno is the one expected next */
+
+	if ((packet->seqno == r->receiving_window->seqno_next_packet_expected)) { /* seqno is the one expected next */
 		uint32_t seqnoLastReceived =
 				r->receiving_window->last_packet_received == NULL ?
 						0 :
@@ -334,6 +334,9 @@ void process_received_data_pkt(rel_t *r, packet_t *packet) {
 			append_node_to_last_received(r, node);
 		}
 		rel_output(r);
+	} else if (packet->seqno
+			< r->receiving_window->seqno_next_packet_expected) { /* receive a data packet with a seqno less than expected, resend previous ack */
+
 	}
 }
 
@@ -372,6 +375,7 @@ void rel_output(rel_t *r) {
 			assert(bytesWritten == current_pck->len - SIZE_DATA_PCK_HEADER);
 			ackno_to_send = current_pck->seqno + 1;
 			if (current_pck->len == SIZE_EOF_PACKET) { /* EOF packet */
+				printf("rel_output: read EOF from sender\n");
 				r->read_EOF_from_sender = 1;
 			}
 			packet_ptr = packet_ptr->next;
