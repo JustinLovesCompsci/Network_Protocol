@@ -377,10 +377,10 @@ void rel_output(rel_t *r) {
 	}
 
 	/* send ack */
-//	if (ackno_to_send > 1) {
-//		send_ack_pck(r, ackno_to_send);
-//		r->receiving_window->seqno_last_packet_outputted = ackno_to_send - 1;
-//	}
+	if (ackno_to_send > 1) {
+		send_ack_pck(r, ackno_to_send);
+		r->receiving_window->seqno_last_packet_outputted = ackno_to_send - 1;
+	}
 	try_finish_receiver(r);
 }
 
