@@ -112,6 +112,7 @@ void process_data_packet(rel_t*, packet_t*);
 rel_t *
 rel_create(conn_t *c, const struct sockaddr_storage *ss,
 		const struct config_common *cc) {
+	printf("IN rel_create\n");
 	rel_t *r;
 
 	r = xmalloc(sizeof(*r));
@@ -137,7 +138,8 @@ rel_create(conn_t *c, const struct sockaddr_storage *ss,
 	r->config = *cc;
 	r->sending_window = init_sending_window();
 	r->receiving_window = init_receiving_window();
-
+	r->client_state = WAITING_INPUT_DATA;
+	r->server_state = WAITING_DATA_PACKET;
 	print_rel(r); // debug
 	return r;
 }
@@ -146,6 +148,7 @@ rel_create(conn_t *c, const struct sockaddr_storage *ss,
  * @author Lawrence (Aohui) Lin
  */
 void rel_destroy(rel_t *r) {
+	printf("IN rel_destroy\n");
 	if (r->next) {
 		r->next->prev = r->prev;
 	}
@@ -179,6 +182,8 @@ void rel_demux(const struct config_common *cc,
  * @author Steve (Siyang) Wang
  */
 void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
+	printf("IN rel_recvpkt\n");
+	convertToHostByteOrder(pkt); // convert to host byte order
 	if (isPacketCorrupted(pkt, n)) {
 		return;
 	}
@@ -186,7 +191,6 @@ void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
 	if (debug) {
 		print_pkt(pkt, "packet", (int) pkt->len);
 	}
-	convertToHostByteOrder(pkt);
 
 	if (pkt->len == SIZE_ACK_PACKET) {
 		process_ack(r, pkt); //client side
@@ -200,9 +204,10 @@ void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
  * @author Steve (Siyang) Wang
  */
 void rel_read(rel_t *relState) {
+	printf("IN rel_read\n");
 	if (relState->client_state == WAITING_INPUT_DATA) {
 		packet_t *packet = create_packet_from_conninput(relState);
-
+		assert(packet!=NULL);
 		/* in case there was data in the input and a packet was created, proceed to process, save
 		 and send the packet */
 		if (packet != NULL) {
@@ -323,6 +328,7 @@ void process_data_packet(rel_t *r, packet_t *packet) {
  * @author Justin (Zihao) Zhang
  */
 void rel_output(rel_t *r) {
+	printf("IN rel_output\n");
 	conn_t *c = r->c;
 	size_t free_space = conn_bufspace(c);
 	/* no ack and no output if no space available */
@@ -373,6 +379,7 @@ void rel_output(rel_t *r) {
  * @author Justin (Zihao) Zhang
  */
 void rel_timer() {
+	//printf("IN rel_timer\n");
 	rel_t* cur_rel = rel_list;
 	while (cur_rel) {
 		struct packet_node* node = get_first_unacked_pck(cur_rel);
@@ -591,6 +598,7 @@ packet_t *create_packet_from_conninput(rel_t *r) {
 					(uint16_t) (SIZE_DATA_PCK_HEADER + bytesRead);
 	packet->ackno = (uint32_t) 1; /* not piggybacking acks, don't ack any packets */
 	packet->seqno = (uint32_t) (r->sending_window->seqno_last_packet_sent + 1);
+	printf("packet length: %d\n", packet->len);
 	return packet;
 }
 /* Prepare for sending UDP packet
