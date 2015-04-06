@@ -85,6 +85,7 @@ struct packet_node* get_first_unacked_pck(rel_t*);
 void append_node_to_last_sent(rel_t*, struct packet_node*);
 void process_received_data_pkt(rel_t*, packet_t*);
 void append_node_to_last_received(rel_t*, struct packet_node*);
+void append_node_to_last_received_test(rel_t **r, struct packet_node* node);
 int try_finish_sender(rel_t*);
 int try_finish_receiver(rel_t*);
 int is_sending_window_full(rel_t*);
@@ -239,7 +240,7 @@ void rel_read(rel_t *relState) {
 		} else { /* read some data from conn_input */
 			packet->len = (uint16_t) (SIZE_DATA_PCK_HEADER + bytesRead);
 		}
-
+//		printf("hey: %d\n", relState->receiving_window->seqno_last_packet_outputted);
 		packet->ackno = relState->receiving_window->seqno_last_packet_outputted
 				+ 1;
 		packet->seqno =
@@ -256,10 +257,13 @@ void rel_read(rel_t *relState) {
 		struct packet_node* node = (struct packet_node*) malloc(
 				sizeof(struct packet_node));
 		node->packet = packet;
-
+//		printf("here?\n");
+//		memcpy(node->packet, packet, sizeof(packet));
+//		printf("here!\n");
 		/* send the packet */
 		append_node_to_last_sent(relState, node);
 		send_data_pck(relState, node, current_time);
+//		free(node);
 
 		if (try_finish_sender(relState)) {
 			return;
@@ -289,6 +293,7 @@ void append_node_to_last_sent(rel_t *r, struct packet_node* node) {
  */
 void append_node_to_last_received(rel_t *r, struct packet_node* node) {
 	printf("append node to last received with seqno %d\n", node->packet->seqno);
+
 	r->receiving_window->seqno_next_packet_expected = node->packet->seqno + 1;
 	if (r->receiving_window->last_packet_received == NULL) {
 		r->receiving_window->last_packet_received = node;
@@ -302,6 +307,22 @@ void append_node_to_last_received(rel_t *r, struct packet_node* node) {
 	node->next = NULL;
 }
 
+void append_node_to_last_received_test(rel_t **r, struct packet_node* node) {
+	//printf("append node to last received with seqno %d\n", node->packet->seqno);
+
+	(*r)->receiving_window->seqno_next_packet_expected = node->packet->seqno + 1;
+	if ((*r)->receiving_window->last_packet_received == NULL) {
+		(*r)->receiving_window->last_packet_received = node;
+		node->next = NULL;
+		node->prev = NULL;
+		return;
+	}
+	(*r)->receiving_window->last_packet_received->next = node;
+	node->prev = (*r)->receiving_window->last_packet_received;
+	(*r)->receiving_window->last_packet_received = node;
+	node->next = NULL;
+}
+
 /* called by receiver
  * process a data packet from sender
  */
@@ -312,6 +333,7 @@ void process_received_data_pkt(rel_t *r, packet_t *packet) {
 	}
 	printf("Packet seqno: %d, expecting: %d\n", packet->seqno,
 			r->receiving_window->seqno_next_packet_expected);
+//	print_receiving_window(r->receiving_window);
 	if ((packet->seqno == r->receiving_window->seqno_next_packet_expected)) {
 		/* seqno is the one expected next */
 		uint32_t seqnoLastReceived =
@@ -329,8 +351,11 @@ void process_received_data_pkt(rel_t *r, packet_t *packet) {
 		if ((seqnoLastReceived - seqno_last_outputted) <= windowSize) {
 			struct packet_node* node = (struct packet_node*) malloc(
 					sizeof(struct packet_node));
-			node->packet = packet;
-			append_node_to_last_received(r, node);
+			packet_t * pack = (packet_t *) malloc(sizeof(packet_t));
+//			node->packet = packet;
+			memcpy(pack, packet, sizeof(packet_t));
+			node->packet = pack;
+			append_node_to_last_received_test(&r, node);
 		}
 		rel_output(r);
 	}
@@ -387,8 +412,10 @@ void rel_output(rel_t *r) {
 
 	/* send ack */
 	if (ackno_to_send > 1) {
+		//if (ackno_to_send != 3) {
 		send_ack_pck(r, ackno_to_send);
 		r->receiving_window->seqno_last_packet_outputted = ackno_to_send - 1;
+		//}
 	}
 	try_finish_receiver(r);
 }
@@ -467,6 +494,7 @@ void print_sending_window(struct sliding_window_send * window) {
 
 void print_receiving_window(struct sliding_window_receive * window) {
 	if (debug) {
+		if (window == NULL) return;
 		printf("Printing receiving window related info....\n");
 		printf("Last packet read: %u, next packet expected: %u\n",
 				window->seqno_last_packet_outputted,
