@@ -254,7 +254,6 @@ void rel_read(rel_t *relState) {
 		append_node_to_last_sent(relState, node);
 		struct timeval* current_time = get_current_time();
 		send_data_pck(relState, node, current_time);
-//		free(node);
 
 		if (try_end_connection(relState)) {
 			return;
@@ -292,7 +291,6 @@ void append_node_to_last_sent(rel_t *r, struct packet_node* node) {
  * append a packet node to the last of a receive sliding window
  */
 void append_node_to_last_received(rel_t *r, struct packet_node* node) {
-
 	if (debug)
 		printf("append node to last received with seqno %d\n",
 				node->packet->seqno);
@@ -360,7 +358,6 @@ void process_received_data_pkt(rel_t *r, packet_t *packet) {
 			struct packet_node* node = (struct packet_node*) malloc(
 					sizeof(struct packet_node));
 			packet_t * pack = (packet_t *) malloc(sizeof(packet_t));
-//			node->packet = packet;
 			memcpy(pack, packet, sizeof(packet_t));
 			node->packet = pack;
 			append_node_to_last_received(r, node);
@@ -382,8 +379,7 @@ void rel_output(rel_t *r) {
 
 	conn_t *c = r->c;
 	size_t free_space = conn_bufspace(c);
-	/* no ack and no output if no space available */
-	if (free_space == 0) {
+	if (free_space == 0) { /* no ack and no output if no space available */
 		return;
 	}
 
@@ -403,8 +399,7 @@ void rel_output(rel_t *r) {
 					"Error generated from conn_output for output a whole packet");
 		}
 
-		// Flushing successful, partially or completely
-		if (free_space > current_pck->len - SIZE_DATA_PCK_HEADER) { /* enough space to output a whole packet */
+		if (free_space > current_pck->len - SIZE_DATA_PCK_HEADER) { /* flushed completely a whole packet */
 			assert(bytesWritten == current_pck->len - SIZE_DATA_PCK_HEADER);
 			ackno_to_send = current_pck->seqno + 1;
 			if (is_EOF_pkt(current_pck)) { /* EOF packet */
@@ -413,7 +408,7 @@ void rel_output(rel_t *r) {
 				r->read_EOF_from_sender = 1;
 			}
 			packet_ptr = packet_ptr->next;
-		} else { /* enough space to output only partial packet */
+		} else { /* flushed only partial packet */
 			*current_pck->data += bytesWritten; //NOTE: check pointer increment correctness
 			current_pck->len = current_pck->len - bytesWritten;
 		}
@@ -429,10 +424,8 @@ void rel_output(rel_t *r) {
 
 	/* send ack */
 	if (ackno_to_send > 1) {
-		//if (ackno_to_send != 3) {
 		send_ack_pck(r, ackno_to_send);
 		r->receiving_window->seqno_last_packet_outputted = ackno_to_send - 1;
-		//}
 	}
 	try_end_connection(r);
 }
