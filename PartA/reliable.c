@@ -328,7 +328,8 @@ void process_received_data_pkt(rel_t *r, packet_t *packet) {
 					r->receiving_window->last_packet_received == NULL ?
 							0 :
 							r->receiving_window->last_packet_received->packet->seqno;
-			uint32_t seqnoLastRead = r->receiving_window->seqno_last_packet_outputted;
+			uint32_t seqnoLastRead =
+					r->receiving_window->seqno_last_packet_outputted;
 			int windowSize = r->config.window;
 
 			//printf("seqnoLastReceived = %d, seqnoLastRead = %d, windowSize = %d\n", seqnoLastReceived, seqnoLastRead, windowSize);
@@ -345,7 +346,6 @@ void process_received_data_pkt(rel_t *r, packet_t *packet) {
 			//	TODO if server flush output succeeded, not change state, if flush data failed, change state to waiting to flush
 			r->receiver_state = WAITING_TO_FLUSH_DATA;
 		}
-		rel_output(r);
 	}
 }
 
@@ -365,6 +365,7 @@ void rel_output(rel_t *r) {
 
 	struct packet_node* packet_ptr = get_first_unread_pck(r);
 	int ackno_to_send = -1;
+	int isEOF = 0;
 
 	/* output data */
 	while (packet_ptr != NULL && free_space > 0) {
@@ -381,11 +382,8 @@ void rel_output(rel_t *r) {
 		if (free_space > current_pck->len - SIZE_DATA_PCK_HEADER) { /* enough space to output a whole packet */
 			assert(bytesWritten == current_pck->len - SIZE_DATA_PCK_HEADER);
 			ackno_to_send = current_pck->seqno + 1;
-			if (current_pck->len == SIZE_EOF_PACKET) { /* EOF packet */
-				r->receiver_state = RECEIVER_FINISHED;
-				if (r->sender_state == SENDER_FINISHED) { //TODO: what's the need for this?
-					rel_destroy(r);
-				}
+			if (current_pck->len == SIZE_EOF_PACKET) { /* EOF packet: have written all output data */
+				isEOF = 1;
 				break;
 			}
 			packet_ptr = packet_ptr->next;
@@ -400,6 +398,14 @@ void rel_output(rel_t *r) {
 	if (ackno_to_send > 1) {
 		send_ack_pck(r, ackno_to_send);
 		r->receiving_window->seqno_last_packet_outputted = ackno_to_send - 1;
+	}
+
+	if (isEOF) {
+//		r->receiver_state = RECEIVER_FINISHED;
+//		if (r->sender_state == SENDER_FINISHED) { //TODO: what's the need for this?
+//			rel_destroy(r);
+//		}
+		rel_destroy(r);
 	}
 }
 
