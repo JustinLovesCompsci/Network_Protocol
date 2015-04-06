@@ -19,16 +19,16 @@
 #define SIZE_MAX_PAYLOAD 500
 #define INIT_SEQ_NUM 1
 
-/*client states*/
+/*sender states*/
 #define WAITING_INPUT_DATA 0
 #define WAITING_ACK 1
 #define WAITING_EOF_ACK 2
-#define CLIENT_FINISHED 3
+#define SENDER_FINISHED 3
 
-/*server states*/
+/*receiver states*/
 #define WAITING_DATA_PACKET 0
 #define WAITING_TO_FLUSH_DATA 1
-#define SERVER_FINISHED 2
+#define RECEIVER_FINISHED 2
 
 struct packet_node {
 	struct packet_node *next;
@@ -58,8 +58,8 @@ struct reliable_state {
 
 	conn_t *c; /* This is the connection object */
 
-	int client_state; /*cient state*/
-	int server_state; /*server state*/
+	int sender_state; /*cient state*/
+	int receiver_state; /*server state*/
 
 	/* Add your own data fields below this */
 	struct config_common config;
@@ -139,8 +139,8 @@ rel_create(conn_t *c, const struct sockaddr_storage *ss,
 	r->config = *cc;
 	r->sending_window = init_sending_window();
 	r->receiving_window = init_receiving_window();
-	r->client_state = WAITING_INPUT_DATA;
-	r->server_state = WAITING_DATA_PACKET;
+	r->sender_state = WAITING_INPUT_DATA;
+	r->receiver_state = WAITING_DATA_PACKET;
 	//print_rel(r); // debug
 	return r;
 }
@@ -207,7 +207,7 @@ void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
  */
 void rel_read(rel_t *relState) {
 	printf("IN rel_read\n");
-	if (relState->client_state == WAITING_INPUT_DATA) {
+	if (relState->sender_state == WAITING_INPUT_DATA) {
 		packet_t *packet = create_packet_from_conninput(relState);
 
 		/* in case there was data in the input and a packet was created, proceed to process, save
@@ -216,7 +216,7 @@ void rel_read(rel_t *relState) {
 			int packetLength = packet->len;
 			assert(packetLength >= SIZE_ACK_PACKET);
 			/* change client state according to whether we are sending EOF packet or normal packet */
-			relState->client_state =
+			relState->sender_state =
 					(packetLength == SIZE_EOF_PACKET) ?
 					WAITING_EOF_ACK :
 														WAITING_ACK;
@@ -287,20 +287,20 @@ void process_packet(rel_t* r, packet_t* pkt) {
  */
 void process_ack(rel_t *r, packet_t *packet) {
 	/* proceed only if we are waiting for an ack */
-	if (r->client_state == WAITING_ACK) {
+	if (r->sender_state == WAITING_ACK) {
 		/* received ack for last normal packet sent, go back to waiting for input
 		 and try to read */
 		if (packet->ackno == r->sending_window->seqno_last_packet_sent + 1) {
-			r->client_state = WAITING_INPUT_DATA;
+			r->sender_state = WAITING_INPUT_DATA;
 			rel_read(r);
 		}
-	} else if (r->client_state == WAITING_EOF_ACK) {
+	} else if (r->sender_state == WAITING_EOF_ACK) {
 		/* received ack for EOF packet, enter declare client connection to be finished */
 		if (packet->ackno == r->sending_window->seqno_last_packet_sent + 1) {
-			r->client_state = CLIENT_FINISHED;
+			r->sender_state = SENDER_FINISHED;
 
 			/* destroy the connection only if the other side's client has finished transmitting */
-			if (r->server_state == SERVER_FINISHED)
+			if (r->receiver_state == RECEIVER_FINISHED)
 				rel_destroy(r);
 		}
 	}
@@ -314,14 +314,11 @@ void process_received_data_pkt(rel_t *r, packet_t *packet) {
 
 	/* if receive the next in-order expected packet and we are waiting for data packets process the packet */
 	if ((packet->seqno == r->receiving_window->seqno_next_packet_expected)
-			&& (r->server_state == WAITING_DATA_PACKET)) { //TODO: check if needed to do status check
+			&& (r->receiver_state == WAITING_DATA_PACKET)) { //TODO: check if needed to do status check
 
 		/* if we received an EOF packet signal to conn_output and destroy the connection if appropriate */
 		if (packet->len == SIZE_EOF_PACKET) {
-			r->server_state = SERVER_FINISHED;
-//			if (r->client_state == CLIENT_FINISHED) {
-//				rel_destory(r);
-//			}
+			r->receiver_state = RECEIVER_FINISHED;
 		}
 		/* we receive a non-EOF data packet, check receiving window size, and append */
 		else {
@@ -344,7 +341,7 @@ void process_received_data_pkt(rel_t *r, packet_t *packet) {
 			}
 
 			//	TODO if server flush output succeeded, not change state, if flush data failed, change state to waiting to flush
-			r->server_state = WAITING_TO_FLUSH_DATA;
+			r->receiver_state = WAITING_TO_FLUSH_DATA;
 		}
 		rel_output(r);
 	}
@@ -383,8 +380,8 @@ void rel_output(rel_t *r) {
 			assert(bytesWritten == current_pck->len - SIZE_DATA_PCK_HEADER);
 			ackno_to_send = current_pck->seqno + 1;
 			if (current_pck->len == SIZE_EOF_PACKET) { /* EOF packet */
-				r->server_state = SERVER_FINISHED;
-				if (r->client_state == CLIENT_FINISHED) { //TODO: what's the need for this?
+				r->receiver_state = RECEIVER_FINISHED;
+				if (r->sender_state == SENDER_FINISHED) { //TODO: what's the need for this?
 					rel_destroy(r);
 				}
 				break;
