@@ -308,8 +308,8 @@ void process_ack(rel_t *r, packet_t *packet) {
 	}
 }
 
-/**
- * Receive a data packet from client in the server side
+/* Function for server side (receiver):
+ * Receive a data packet from client
  */
 void process_received_data_pkt(rel_t *r, packet_t *packet) {
 	//printf("Packet seqno: %d, expecting: %d\n", packet->seqno, r->receiving_window->seqno_next_packet_expected);
@@ -601,7 +601,8 @@ struct packet_node* get_first_unacked_pck(rel_t* r) {
  * Function called to: read from conn_input, create a packet from conn_input, and return it
  * Note: if no data in conn_input: return null
  * 		 if packet created: memory is allocated (to be freed later)
- * 		 checkSum not computed here: to be computed right before packet is to be sent and converted to network order
+ * 		 checkSum not computed here: to be computed right before packet is to be sent
+ * 		  and converted to network order
  */
 packet_t *create_packet_from_conninput(rel_t *r) {
 	packet_t *packet = (packet_t*) malloc(sizeof(packet_t));
