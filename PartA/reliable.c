@@ -84,20 +84,20 @@ void destroy_sending_window(struct sliding_window_send*);
 void destory_receiving_window(struct sliding_window_receive*);
 void send_ack_pck(rel_t*, int);
 packet_t * create_EOF_packet();
-int isGreaterThan(struct timeval*, int);
+int is_greater_than(struct timeval*, int);
 void send_data_pck(rel_t*, struct packet_node*, struct timeval*);
 
-int isPacketCorrupted(packet_t*, size_t);
-void convertToHostByteOrder(packet_t*);
+int is_pkt_corrupted(packet_t*, size_t);
+void convert_to_host_order(packet_t*);
+void convert_to_network_order(packet_t*);
 void process_ack(rel_t *, packet_t *);
 void processPacket(rel_t*, packet_t*);
-uint16_t getCheckSum(packet_t*, int);
+uint16_t get_check_sum(packet_t*, int);
 
 struct packet_node* get_first_unread_pck(rel_t*);
 struct packet_node* get_first_unacked_pck(rel_t*);
 packet_t *create_packet_from_conninput(rel_t *);
-void addCKAndConvertOrder(packet_t*);
-void convertToNetworkByteOrder(packet_t*);
+void add_ck_and_convert_order(packet_t*);
 void appendPacketNodeToLastSent(rel_t*, struct packet_node*);
 void process_received_data_pkt(rel_t*, packet_t*);
 void appendPacketNodeToLastReceived(rel_t*, struct packet_node*);
@@ -184,8 +184,8 @@ void rel_demux(const struct config_common *cc,
  */
 void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
 	printf("IN rel_recvpkt\n");
-	convertToHostByteOrder(pkt); // convert to host byte order
-	if (isPacketCorrupted(pkt, n)) {
+	convert_to_host_order(pkt); // convert to host byte order
+	if (is_pkt_corrupted(pkt, n)) {
 		return;
 	}
 
@@ -407,7 +407,7 @@ void rel_timer() {
 			struct timeval* diff = (struct timeval*) malloc(
 					sizeof(struct timeval));
 			timersub(current_time, node->time_sent, diff);
-			if (isGreaterThan(diff, cur_rel->config.timeout)) { /* Retransmit because exceeds timeout */
+			if (is_greater_than(diff, cur_rel->config.timeout)) { /* Retransmit because exceeds timeout */
 				if (debug) {
 					printf("Found timeout packet and start to retransmit");
 					print_pkt(node->packet, "packet", node->packet->len);
@@ -512,7 +512,7 @@ void destory_receiving_window(struct sliding_window_receive* window) {
 	free(window);
 }
 
-int isGreaterThan(struct timeval* time1, int millisec2) {
+int is_greater_than(struct timeval* time1, int millisec2) {
 	int millisec1 = time1->tv_sec * 1000 + time1->tv_usec / 1000;
 	return millisec1 > millisec2;
 }
@@ -521,7 +521,7 @@ int isGreaterThan(struct timeval* time1, int millisec2) {
  * computing its checksum and comparing to the checksum in the packet.
  * Returns 1 if packet is corrupted and 0 if it is not.
  */
-int isPacketCorrupted(packet_t* packet, size_t pkt_length) {
+int is_pkt_corrupted(packet_t* packet, size_t pkt_length) {
 	int packetLength = (int) ntohs(packet->len);
 	/* If we received fewer bytes than the packet's size declare corruption. */
 	if (pkt_length < (size_t) packetLength) {
@@ -529,7 +529,7 @@ int isPacketCorrupted(packet_t* packet, size_t pkt_length) {
 	}
 
 	uint16_t expectedChecksum = packet->cksum;
-	uint16_t computedChecksum = getCheckSum(packet, packetLength);
+	uint16_t computedChecksum = get_check_sum(packet, packetLength);
 	return expectedChecksum != computedChecksum;
 }
 
@@ -543,8 +543,8 @@ void send_ack_pck(rel_t* r, int ack_num) {
 	packet_t* ack_pck = (packet_t*) malloc(sizeof(packet_t));
 	ack_pck->ackno = ack_num;
 	ack_pck->len = SIZE_ACK_PACKET;
-	ack_pck->cksum = getCheckSum(ack_pck, SIZE_ACK_PACKET);
-	convertToNetworkByteOrder(ack_pck);
+	ack_pck->cksum = get_check_sum(ack_pck, SIZE_ACK_PACKET);
+	convert_to_network_order(ack_pck);
 	conn_sendpkt(r->c, ack_pck, SIZE_ACK_PACKET);
 	free(ack_pck);
 }
@@ -556,7 +556,7 @@ void send_data_pck(rel_t*r, struct packet_node* pkt_ptr,
 		struct timeval* current_time) {
 	packet_t * packet = pkt_ptr->packet;
 	size_t pckLen = packet->len;
-	addCKAndConvertOrder(packet);
+	add_ck_and_convert_order(packet);
 	conn_sendpkt(r->c, packet, pckLen);
 	pkt_ptr->time_sent = current_time;
 }
@@ -617,13 +617,13 @@ packet_t *create_packet_from_conninput(rel_t *r) {
  * 1. computes and writes the checksum to the cksum field
  * 2. converts all necessary fields to network byte order
  */
-void addCKAndConvertOrder(packet_t* packet) {
-	packet->cksum = getCheckSum(packet, (int) packet->len);
+void add_ck_and_convert_order(packet_t* packet) {
+	packet->cksum = get_check_sum(packet, (int) packet->len);
 	assert(packet->cksum != 0);
-	convertToNetworkByteOrder(packet);
+	convert_to_network_order(packet);
 }
 
-void convertToNetworkByteOrder(packet_t *packet) {
+void convert_to_network_order(packet_t *packet) {
 	if (packet->len != SIZE_ACK_PACKET) { /* if data packet, convert its seqno */
 		packet->seqno = htonl(packet->seqno);
 	}
@@ -632,7 +632,7 @@ void convertToNetworkByteOrder(packet_t *packet) {
 	packet->ackno = htonl(packet->ackno);
 }
 
-void convertToHostByteOrder(packet_t* packet) {
+void convert_to_host_order(packet_t* packet) {
 	if (packet->len != SIZE_ACK_PACKET) { /* if data packet, convert its seqno */
 		packet->seqno = ntohl(packet->seqno);
 	}
@@ -641,7 +641,7 @@ void convertToHostByteOrder(packet_t* packet) {
 	packet->cksum = ntohs(packet->cksum);
 }
 
-uint16_t getCheckSum(packet_t *packet, int packetLength) {
+uint16_t get_check_sum(packet_t *packet, int packetLength) {
 	packet->cksum = 0;
 	return cksum(packet, packetLength);
 }
@@ -651,7 +651,7 @@ packet_t * create_EOF_packet() {
 	eof_packet->len = SIZE_EOF_PACKET;
 	eof_packet->ackno = 1;
 	eof_packet->seqno = 0;
-	eof_packet->cksum = getCheckSum(eof_packet, SIZE_EOF_PACKET);
+	eof_packet->cksum = get_check_sum(eof_packet, SIZE_EOF_PACKET);
 	return eof_packet;
 }
 
