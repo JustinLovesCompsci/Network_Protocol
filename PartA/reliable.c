@@ -101,7 +101,7 @@ int is_sending_window_full(rel_t*);
 rel_t *
 rel_create(conn_t *c, const struct sockaddr_storage *ss,
 		const struct config_common *cc) {
-	printf("IN rel_create\n");
+//	printf("IN rel_create\n");
 	rel_t *r;
 
 	r = xmalloc(sizeof(*r));
@@ -169,12 +169,13 @@ void rel_demux(const struct config_common *cc,
  * @author Justin (Zihao) Zhang
  */
 void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
-	printf("IN rel_recvpkt\n");
-	convert_to_host_order(pkt);
+//	printf("IN rel_recvpkt\n");
 	if (is_pkt_corrupted(pkt, n)) {
 		printf("Received a packet that's corrupted. \n");
 		return;
 	}
+
+	convert_to_host_order(pkt);
 
 	if (debug) {
 		printf("IN rel_recvpkt, print host-order non-corrupted packet: \n");
@@ -212,12 +213,12 @@ void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
  * @author Justin (Zihao) Zhang
  */
 void rel_read(rel_t *relState) {
-	printf("IN rel_read\n");
+//	printf("IN rel_read\n");
 	for (;;) {
-		if (is_sending_window_full(relState)) {
-			printf("window size is full\n");
-			return;
-		}
+//		if (is_sending_window_full(relState)) {
+//			printf("window size is full\n");
+//			return;
+//		}
 		packet_t *packet = (packet_t*) malloc(sizeof(packet_t));
 
 		/* read one full packet's worth of data from input */
@@ -321,7 +322,7 @@ void process_received_data_pkt(rel_t *r, packet_t *packet) {
 		print_pointers_in_receive_window(r->receiving_window, r->config.window);
 
 		/* update receive window for the newly arrived packet */
-		if ((seqnoLastReceived - seqno_last_outputted) < windowSize) {
+		if ((seqnoLastReceived - seqno_last_outputted) <= windowSize) {
 			struct packet_node* node = (struct packet_node*) malloc(
 					sizeof(struct packet_node));
 			node->packet = packet;
@@ -337,7 +338,7 @@ void process_received_data_pkt(rel_t *r, packet_t *packet) {
  * @author Justin (Zihao) Zhang
  */
 void rel_output(rel_t *r) {
-	printf("IN rel_output\n");
+//	printf("IN rel_output\n");
 	conn_t *c = r->c;
 	size_t free_space = conn_bufspace(c);
 	/* no ack and no output if no space available */
@@ -402,7 +403,6 @@ void rel_timer() {
 		struct packet_node* node = get_first_unacked_pck(cur_rel);
 //		printf("check rel_timer()");
 		while (node) {
-//			printf("check packet node in timer");
 			struct timeval* current_time = (struct timeval*) malloc(
 					sizeof(struct timeval));
 			if (gettimeofday(current_time, NULL) == -1) {
@@ -413,6 +413,7 @@ void rel_timer() {
 			struct timeval* diff = (struct timeval*) malloc(
 					sizeof(struct timeval));
 			timersub(current_time, node->time_sent, diff);
+			printf("diff is %d:%d\n", diff->tv_sec, diff->tv_usec);
 			if (is_greater_than(diff, cur_rel->config.timeout)) { /* Retransmit because exceeds timeout */
 				if (debug) {
 					printf("Found timeout packet and start to retransmit:");
@@ -538,13 +539,15 @@ int is_greater_than(struct timeval* time1, int millisec2) {
  * Returns 1 if packet is corrupted and 0 if it is not.
  */
 int is_pkt_corrupted(packet_t* packet, size_t pkt_length) {
-	size_t packetLength = packet->len;
+	size_t packetLength = ntohs(packet->len);
 	/* If we received fewer bytes than the packet's size declare corruption. */
 	if (pkt_length < packetLength) {
+		printf("Packet size isn't right. \n");
 		return 1;
 	}
 	uint16_t expectedChecksum = packet->cksum;
 	uint16_t computedChecksum = get_check_sum(packet, packetLength);
+//	printf("Expecting cksum: %d, got: %d\n", expectedChecksum, computedChecksum);
 	return expectedChecksum != computedChecksum;
 }
 
@@ -553,8 +556,8 @@ void send_ack_pck(rel_t* r, int ack_num) {
 	packet_t* ack_pck = (packet_t*) malloc(sizeof(packet_t));
 	ack_pck->ackno = ack_num;
 	ack_pck->len = SIZE_ACK_PACKET;
-	ack_pck->cksum = get_check_sum(ack_pck, SIZE_ACK_PACKET);
 	convert_to_network_order(ack_pck);
+	ack_pck->cksum = get_check_sum(ack_pck, SIZE_ACK_PACKET);
 	conn_sendpkt(r->c, ack_pck, SIZE_ACK_PACKET);
 	free(ack_pck);
 }
@@ -566,13 +569,13 @@ void send_data_pck(rel_t*r, struct packet_node* pkt_ptr,
 		struct timeval* current_time) {
 	packet_t * packet = pkt_ptr->packet;
 	size_t pckLen = packet->len;
-	packet->cksum = get_check_sum(packet, (int) packet->len);
-	assert(packet->cksum != 0);
 	if (debug) {
 		printf("IN send_data_pck, print host order packet:\n");
 		print_pkt(packet, "packet", packet->len);
 	}
 	convert_to_network_order(packet);
+	packet->cksum = get_check_sum(packet, pckLen);
+	assert(packet->cksum != 0);
 	conn_sendpkt(r->c, packet, pckLen);
 	pkt_ptr->time_sent = current_time;
 	convert_to_host_order(packet);
@@ -593,8 +596,8 @@ struct packet_node* get_first_unread_pck(rel_t* r) {
 
 struct packet_node* get_first_unacked_pck(rel_t* r) {
 	struct packet_node* packet_ptr = r->sending_window->last_packet_sent;
-
 	while (packet_ptr) {
+		//printf("packet seq: %d, sending window last pkt acked: %d\n", packet_ptr->packet->seqno, r->sending_window->seqno_last_packet_acked);
 		if (packet_ptr->packet->seqno
 				== r->sending_window->seqno_last_packet_acked + 1) {
 			break;
@@ -622,7 +625,9 @@ void convert_to_host_order(packet_t* packet) {
 
 /* return checksum in network byte order */
 uint16_t get_check_sum(packet_t *packet, int packetLength) {
-	packet->cksum = 0;
+//	packet->cksum = 0;
+	memset(&packet->cksum, 0, sizeof(packet->cksum));
+//	convert_to_host_order(packet);
 	return cksum(packet, packetLength);
 }
 
