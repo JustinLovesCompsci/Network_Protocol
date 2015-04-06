@@ -365,9 +365,9 @@ void process_received_data_pkt(rel_t *r, packet_t *packet) {
 		}
 		rel_output(r);
 	} else if (packet->seqno
-			< r->receiving_window->seqno_next_packet_expected) { /* receive a data packet with a seqno less than expected, resend previous ack */
-		//TODO: #11 Resending ACK
-		printf("sending ack with ackno %d\n", r->receiving_window->seqno_next_packet_expected);
+			< r->receiving_window->seqno_next_packet_expected) { /* receive a data packet with a seqno less than expected, re-send previous ack */
+		printf("sending ack with ackno %d\n",
+				r->receiving_window->seqno_next_packet_expected);
 		send_ack_pck(r, r->receiving_window->seqno_next_packet_expected);
 	}
 }
@@ -602,8 +602,9 @@ void send_ack_pck(rel_t* r, int ack_num) {
 	ack_pck->cksum = get_check_sum(ack_pck, SIZE_ACK_PACKET);
 	conn_sendpkt(r->c, ack_pck, SIZE_ACK_PACKET);
 	free(ack_pck);
-	if (debug)
+	if (debug) {
 		printf("Ack packet sent\n");
+	}
 }
 
 /**
