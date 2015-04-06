@@ -307,7 +307,7 @@ void process_ack(rel_t *r, packet_t *packet) {
  * Receive a data packet from client in the server side
  */
 void process_received_data_pkt(rel_t *r, packet_t *packet) {
-	printf("Inside this method\n");
+	printf("Packet seqno: %d, expecting: %d\n", packet->seqno, r->receiving_window->seqno_next_packet_expected);
 	/* if receive the next in-order expected packet and we are waiting for data packets process the packet */
 	if ((packet->seqno == r->receiving_window->seqno_next_packet_expected)
 			&& (r->server_state == WAITING_DATA_PACKET)) { //TODO: check if needed to do status check
@@ -479,7 +479,7 @@ struct sliding_window_send * init_sending_window() {
 	struct sliding_window_send * window = (struct sliding_window_send *) malloc(
 			sizeof(struct sliding_window_send));
 	window->seqno_last_packet_acked = 0;
-	window->seqno_last_packet_sent = INIT_SEQ_NUM;
+	window->seqno_last_packet_sent = 0;
 	window->last_packet_sent = NULL;
 	return window;
 }
