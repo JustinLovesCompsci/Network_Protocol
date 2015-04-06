@@ -88,8 +88,9 @@ void add_ck_and_convert_order(packet_t*);
 void append_node_to_last_sent(rel_t*, struct packet_node*);
 void process_received_data_pkt(rel_t*, packet_t*);
 void append_node_to_last_received(rel_t*, struct packet_node*);
-void try_finish_sender(rel_t*);
-void try_finish_receiver(rel_t*);
+int try_finish_sender(rel_t*);
+int try_finish_receiver(rel_t*);
+int is_sending_window_full(rel_t*);
 
 /**
  * Creates a new reliable protocol session, returns NULL on failure.
@@ -207,13 +208,27 @@ void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
  */
 void rel_read(rel_t *relState) {
 	printf("IN rel_read\n");
-	packet_t *packet = create_packet_from_conninput(relState);
-
-	/* in case there was data in the input and a packet was created, proceed to process, save
-	 and send the packet */
-	if (packet != NULL) {
-		int packetLength = packet->len;
-		assert(packetLength >= SIZE_DATA_PCK_HEADER);
+	for (;;) {
+		if (is_sending_window_full(relState)) {
+			return;
+		}
+		packet_t *packet = (packet_t*) malloc(sizeof(packet_t));
+		/* read one full packet's worth of data from input */
+		int bytesRead = conn_input(relState->c, packet->data, SIZE_MAX_PAYLOAD);
+		read_EOF_from_input = 0;
+		if (bytesRead == 0) {
+			free(packet);
+			return;
+		}
+		if (bytesRead == -1) { /* read EOF from conn_input */
+			read_EOF_from_input = 1;
+			packet->len = (uint16_t) SIZE_EOF_PACKET;
+		} else {
+			packet->len = (uint16_t) (SIZE_DATA_PCK_HEADER + bytesRead);
+		}
+		packet->ackno = (uint32_t) 1; /* not piggybacking acks, don't ack any packets */
+		packet->seqno =
+				(uint32_t) (relState->sending_window->seqno_last_packet_sent + 1);
 
 		/* get current send time */
 		struct timeval* current_time = (struct timeval*) malloc(
@@ -225,13 +240,15 @@ void rel_read(rel_t *relState) {
 		struct packet_node* node = (struct packet_node*) malloc(
 				sizeof(struct packet_node));
 		node->packet = packet;
-
+		/* send the packet */
 		append_node_to_last_sent(relState, node);
 		relState->sending_window->seqno_last_packet_sent = packet->seqno;
 		send_data_pck(relState, node, current_time);
-	}
 
-	try_finish_sender(relState);
+		if (try_finish_sender(relState)) {
+			return;
+		}
+	}
 }
 
 /**
@@ -621,14 +638,23 @@ packet_t * create_EOF_packet() {
 	return eof_packet;
 }
 
-void try_finish_sender(rel_t* r) {
+int try_finish_sender(rel_t* r) {
 	if (all_pkts_acked && read_EOF_from_input) {
 		rel_destroy(r);
+		return 1;
 	}
+	return 0;
 }
 
-void try_finish_receiver(rel_t* r) {
+int try_finish_receiver(rel_t* r) {
 	if (read_EOF_from_sender && output_all_data) {
 		rel_destroy(r);
+		return 1;
 	}
+	return 0;
+}
+
+int is_sending_window_full(rel_t* r) {
+	return r->sending_window->seqno_last_packet_sent
+			- r->sending_window->seqno_last_packet_acked >= r->config->window;
 }
