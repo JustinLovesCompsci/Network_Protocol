@@ -88,6 +88,7 @@ void append_node_to_last_received(rel_t*, struct packet_node*);
 int try_finish_sender(rel_t*);
 int try_finish_receiver(rel_t*);
 int is_sending_window_full(rel_t*);
+void process_received_ack_pkt(rel_t*, packet_t*);
 
 /**
  * Creates a new reliable protocol session, returns NULL on failure.
@@ -182,26 +183,7 @@ void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
 	}
 
 	if (pkt->len == SIZE_ACK_PACKET) { /* ACK packet */
-		if (debug) {
-			printf("Received ACK packet\n");
-		}
-		/* update last packet acked pointer in sending window */
-		if (pkt->ackno >= r->sending_window->seqno_last_packet_acked) {
-			r->sending_window->seqno_last_packet_acked = pkt->ackno - 1;
-		}
-
-		if (!is_sending_window_full(r)) {
-			rel_read(r);
-		}
-
-		if (r->sending_window->seqno_last_packet_acked
-				== r->sending_window->seqno_last_packet_sent) { /* check if all packets sent so far have been acknowledged */
-			r->all_pkts_acked = 1;
-			try_finish_sender(r);
-		} else {
-			r->all_pkts_acked = 0;
-		}
-
+		process_received_ack_pkt(r, pkt);
 	} else { /* data packet */
 		process_received_data_pkt(r, pkt);
 	}
@@ -302,6 +284,28 @@ void append_node_to_last_received(rel_t *r, struct packet_node* node) {
 	node->next = NULL;
 }
 
+void process_received_ack_pkt(rel_t *r, packet_t *pkt) {
+	if (debug) {
+		printf("Received ACK packet\n");
+	}
+	/* update last packet acked pointer in sending window */
+	if (pkt->ackno > r->sending_window->seqno_last_packet_acked) {
+		r->sending_window->seqno_last_packet_acked = pkt->ackno - 1;
+	}
+
+	if (!is_sending_window_full(r)) {
+		rel_read(r);
+	}
+
+	if (r->sending_window->seqno_last_packet_acked
+			== r->sending_window->seqno_last_packet_sent) { /* check if all packets sent so far have been acknowledged */
+		r->all_pkts_acked = 1;
+		try_finish_sender(r);
+	} else {
+		r->all_pkts_acked = 0;
+	}
+}
+
 /* called by receiver
  * process a data packet from sender
  */
@@ -318,8 +322,6 @@ void process_received_data_pkt(rel_t *r, packet_t *packet) {
 				r->receiving_window->last_packet_received == NULL ?
 						0 :
 						r->receiving_window->last_packet_received->packet->seqno;
-//		printf("lastReceived packet before update has: %s\n",
-//				r->receiving_window->last_packet_received->packet->data);
 		uint32_t seqno_last_outputted =
 				r->receiving_window->seqno_last_packet_outputted;
 		int windowSize = r->config.window;
@@ -331,6 +333,7 @@ void process_received_data_pkt(rel_t *r, packet_t *packet) {
 					sizeof(struct packet_node));
 			node->packet = packet;
 			append_node_to_last_received(r, node);
+//			process_received_ack_pkt(r, packet); //TODO: check if needed
 		}
 		rel_output(r);
 	}
@@ -556,7 +559,6 @@ int is_pkt_corrupted(packet_t* packet, size_t pkt_length) {
 }
 
 void send_ack_pck(rel_t* r, int ack_num) {
-//TODO: make sure ack_num is not sent before
 	packet_t* ack_pck = (packet_t*) malloc(sizeof(packet_t));
 	ack_pck->ackno = ack_num;
 	ack_pck->len = SIZE_ACK_PACKET;
