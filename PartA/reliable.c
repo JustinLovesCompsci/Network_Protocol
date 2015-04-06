@@ -162,7 +162,7 @@ void rel_demux(const struct config_common *cc,
 
 /**
  * called by both sender and receiver
- * @author Steve (Siyang) Wang
+ * @author Justin (Zihao) Zhang
  */
 void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
 	printf("IN rel_recvpkt\n");
@@ -212,6 +212,7 @@ void rel_read(rel_t *relState) {
 	printf("IN rel_read\n");
 	for (;;) {
 		if (is_sending_window_full(relState)) {
+			printf("window size is full");
 			return;
 		}
 		packet_t *packet = (packet_t*) malloc(sizeof(packet_t));
@@ -220,9 +221,11 @@ void rel_read(rel_t *relState) {
 		read_EOF_from_input = 0;
 		if (bytesRead == 0) {
 			free(packet);
+			printf("no date is available at input now");
 			return;
 		}
 		if (bytesRead == -1) { /* read EOF from conn_input */
+			printf("read EOF from input");
 			read_EOF_from_input = 1;
 			packet->len = (uint16_t) SIZE_EOF_PACKET;
 		} else {
@@ -376,7 +379,7 @@ void rel_output(rel_t *r) {
  * @author Justin (Zihao) Zhang
  */
 void rel_timer() {
-//printf("IN rel_timer\n");
+//	printf("IN rel_timer\n");
 	rel_t* cur_rel = rel_list;
 	while (cur_rel) {
 		struct packet_node* node = get_first_unacked_pck(cur_rel);
