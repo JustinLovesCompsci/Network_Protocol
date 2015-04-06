@@ -127,6 +127,7 @@ void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
 
 void rel_read(rel_t *s) {
 	if (s->c->sender_receiver == RECEIVER) {
+
 		//if already sent EOF to the sender
 		//  return;
 		//else
@@ -186,6 +187,7 @@ packet_t * create_EOF_packet() {
 void convertToHostByteOrder(packet_t* packet) {
 	packet->len = ntohs(packet->len);
 	packet->ackno = ntohl(packet->ackno);
+	packet->rwnd = ntohl(packet->rwnd);
 
 	/* if the packet is a data packet it additionally has a seqno that has
 	 to be converted to host byte order */
@@ -200,6 +202,7 @@ void convertToNetworkByteOrder(packet_t *packet) {
 
 	packet->len = htons(packet->len);
 	packet->ackno = htonl(packet->ackno);
+	packet->rwnd = htonl(packet->rwnd);
 }
 
 uint16_t computeChecksum(packet_t *packet, int packetLength) {
