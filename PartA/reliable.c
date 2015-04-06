@@ -322,8 +322,8 @@ void process_received_data_pkt(rel_t *r, packet_t *packet) {
 		printf("Start to process received data packet...\n");
 		//printf("Packet seqno: %d, expecting: %d\n", packet->seqno, r->receiving_window->seqno_next_packet_expected);
 	}
-	printf("Packet seqno: %d, expecting: %d\n", packet->seqno,
-			r->receiving_window->seqno_next_packet_expected);
+	printf("Packet seqno: %d, expecting: %d\n",
+						  packet->seqno, r->receiving_window->seqno_next_packet_expected);
 	if ((packet->seqno == r->receiving_window->seqno_next_packet_expected)) {
 		/* seqno is the one expected next */
 		uint32_t seqnoLastReceived =
@@ -552,6 +552,7 @@ int is_greater_than(struct timeval* time1, int millisec2) {
 /*
  * computing its checksum and comparing to the checksum in the packet.
  * Returns 1 if packet is corrupted and 0 if it is not.
+ *  @author Steve Wang
  */
 int is_pkt_corrupted(packet_t* packet, size_t pkt_length) {
 	size_t packetLength = ntohs(packet->len);
@@ -621,6 +622,7 @@ struct packet_node* get_first_unacked_pck(rel_t* r) {
 	return packet_ptr;
 }
 
+/* @author Steve Wang*/
 void convert_to_network_order(packet_t *packet) {
 	if (packet->len != SIZE_ACK_PACKET) { /* if data packet, convert its seqno */
 		packet->seqno = htonl(packet->seqno);
@@ -629,6 +631,7 @@ void convert_to_network_order(packet_t *packet) {
 	packet->ackno = htonl(packet->ackno);
 }
 
+/* @author Steve Wang*/
 void convert_to_host_order(packet_t* packet) {
 	if (packet->len != SIZE_ACK_PACKET) { /* if data packet, convert its seqno */
 		packet->seqno = ntohl(packet->seqno);
@@ -637,7 +640,8 @@ void convert_to_host_order(packet_t* packet) {
 	packet->ackno = ntohl(packet->ackno);
 }
 
-/* return checksum in network byte order */
+/* return checksum in network byte order
+ * @author Steve Wang */
 uint16_t get_check_sum(packet_t *packet, int packetLength) {
 //	packet->cksum = 0;
 	memset(&packet->cksum, 0, sizeof(packet->cksum));
