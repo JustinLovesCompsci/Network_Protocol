@@ -447,6 +447,7 @@ void convert_to_host_order(packet_t* packet) {
 	}
 	packet->len = ntohs(packet->len);
 	packet->ackno = ntohl(packet->ackno);
+	packet->rwnd = ntohl(packet->rwnd);
 }
 
 /**
