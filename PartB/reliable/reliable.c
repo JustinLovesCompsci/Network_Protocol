@@ -71,10 +71,10 @@ struct reliable_state {
 
 /* debug functions */
 void print_config(struct config_common);
-//void print_rel(rel_t *);
-//void print_sending_window(struct sliding_window_send*);
-//void print_receiving_window(struct sliding_window_receive*);
-//void print_pointers_in_receive_window(struct sliding_window_receive*, int);
+void print_rel(rel_t *);
+void print_sending_window(struct sliding_window_send*);
+void print_receiving_window(struct sliding_window_receive*);
+void print_pointers_in_receive_window(struct sliding_window_receive*, int);
 
 /* helper functions from 3a */
 struct sliding_window_send * init_sending_window();
@@ -202,13 +202,13 @@ void rel_timer() {
 ////////////////////////////////////////////////////////////////////////
 ////////////////////////// Debug functions /////////////////////////////
 ////////////////////////////////////////////////////////////////////////
-//void print_rel(rel_t * rel) {
-//	if (debug) {
-//		print_config(rel->config);
-//		print_sending_window(rel->sending_window);
-//		print_receiving_window(rel->receiving_window);
-//	}
-//}
+void print_rel(rel_t * rel) {
+	if (debug) {
+		print_config(rel->config);
+		print_sending_window(rel->sending_window);
+		print_receiving_window(rel->receiving_window);
+	}
+}
 
 void print_config(struct config_common c) {
 	if (debug) {
