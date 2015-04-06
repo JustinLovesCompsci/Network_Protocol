@@ -85,10 +85,13 @@ struct packet_node* get_first_unacked_pck(rel_t*);
 void append_node_to_last_sent(rel_t*, struct packet_node*);
 void process_received_data_pkt(rel_t*, packet_t*);
 void append_node_to_last_received(rel_t*, struct packet_node*);
-int try_finish_sender(rel_t*);
-int try_finish_receiver(rel_t*);
 int is_sending_window_full(rel_t*);
 void process_received_ack_pkt(rel_t*, packet_t*);
+int is_EOF_pkt(packet_t*);
+int is_new_ACK(uint32_t, rel_t*);
+int is_all_sent_pkts_acked(rel_t*);
+struct timeval* get_current_time();
+int try_end_connection(rel_t*);
 
 /**
  * Creates a new reliable protocol session, returns NULL on failure.
@@ -164,7 +167,6 @@ void rel_demux(const struct config_common *cc,
 		const struct sockaddr_storage *ss, packet_t *pkt, size_t len) {
 }
 
-
 /*method called by both server(sender) and client(receiver), responsible for:
  * 	checking checksum for checking corrupted data (drop if corrupted)
  * 	convert to host byte order
@@ -173,9 +175,8 @@ void rel_demux(const struct config_common *cc,
  * 	@Justin (Zihao) Zhang
  */
 
-
 void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
-//	printf("IN rel_recvpkt\n");
+	printf("IN rel_recvpkt\n");
 	if (is_pkt_corrupted(pkt, n)) {
 		printf("Received a packet that's corrupted. \n");
 		return;
@@ -188,12 +189,11 @@ void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
 		print_pkt(pkt, "packet", (int) pkt->len);
 	}
 
-
-	process_received_ack_pkt(r, pkt); /* regard both data and ack packet as Acks */
 	if (pkt->len != SIZE_ACK_PACKET) { /* data packet */
 		process_received_data_pkt(r, pkt);
 
 	}
+	process_received_ack_pkt(r, pkt); /* regard both data and ack packet as Acks */
 }
 
 /**
@@ -214,6 +214,7 @@ void rel_read(rel_t *relState) {
 		/* read one full packet's worth of data from input */
 		int bytesRead = conn_input(relState->c, packet->data, SIZE_MAX_PAYLOAD);
 		relState->read_EOF_from_input = 0;
+
 		if (bytesRead == 0) { /* no data is read from conn_input */
 			free(packet);
 			if (debug) {
@@ -221,39 +222,52 @@ void rel_read(rel_t *relState) {
 			}
 			return;
 		}
+
 		if (bytesRead == -1) { /* read EOF from conn_input */
+			if (relState->read_EOF_from_input) { /* have read EOF from input before, return without re-sending */
+				printf("re-read EOF from input\n");
+				free(packet);
+				return;
+			}
 			printf("read EOF from input\n");
 			relState->read_EOF_from_input = 1;
 			packet->len = (uint16_t) SIZE_EOF_PACKET;
+
 		} else { /* read some data from conn_input */
 			packet->len = (uint16_t) (SIZE_DATA_PCK_HEADER + bytesRead);
 		}
-
+//		printf("hey: %d\n", relState->receiving_window->seqno_last_packet_outputted);
 		packet->ackno = relState->receiving_window->seqno_last_packet_outputted
 				+ 1;
 		packet->seqno =
 				(uint32_t) (relState->sending_window->seqno_last_packet_sent + 1);
 
-		/* get current send time */
-		struct timeval* current_time = (struct timeval*) malloc(
-				sizeof(struct timeval));
-		if (gettimeofday(current_time, NULL) == -1) {
-			perror("Error generated from getting current time in rel_timer\n");
-		}
-
 		/* initialize packet node */
 		struct packet_node* node = (struct packet_node*) malloc(
 				sizeof(struct packet_node));
 		node->packet = packet;
-
+//		printf("here?\n");
+//		memcpy(node->packet, packet, sizeof(packet));
+//		printf("here!\n");
 		/* send the packet */
 		append_node_to_last_sent(relState, node);
+		struct timeval* current_time = get_current_time();
 		send_data_pck(relState, node, current_time);
+//		free(node);
 
-		if (try_finish_sender(relState)) {
+		if (try_end_connection(relState)) {
 			return;
 		}
 	}
+}
+
+struct timeval* get_current_time() {
+	struct timeval* current_time = (struct timeval*) malloc(
+			sizeof(struct timeval));
+	if (gettimeofday(current_time, NULL) == -1) {
+		perror("Error generated from getting current time in rel_timer\n");
+	}
+	return current_time;
 }
 
 /**
@@ -278,6 +292,7 @@ void append_node_to_last_sent(rel_t *r, struct packet_node* node) {
  */
 void append_node_to_last_received(rel_t *r, struct packet_node* node) {
 	printf("append node to last received with seqno %d\n", node->packet->seqno);
+
 	r->receiving_window->seqno_next_packet_expected = node->packet->seqno + 1;
 	if (r->receiving_window->last_packet_received == NULL) {
 		r->receiving_window->last_packet_received = node;
@@ -295,21 +310,17 @@ void process_received_ack_pkt(rel_t *r, packet_t *pkt) {
 	if (debug) {
 		printf("Received ACK packet\n");
 	}
-	/* update last packet acked pointer in sending window */
-	if (pkt->ackno > r->sending_window->seqno_last_packet_acked) {
+	/* update last packet acked pointer in sending window if new ack arrives */
+	if (is_new_ACK(pkt->ackno, r)) {
 		r->sending_window->seqno_last_packet_acked = pkt->ackno - 1;
+		if (!is_sending_window_full(r)) {
+			rel_read(r);
+		}
 	}
 
-	if (!is_sending_window_full(r)) {
-		rel_read(r);
-	}
-
-	if (r->sending_window->seqno_last_packet_acked
-			== r->sending_window->seqno_last_packet_sent) { /* check if all packets sent so far have been acknowledged */
-		r->all_pkts_acked = 1;
-		try_finish_sender(r);
-	} else {
-		r->all_pkts_acked = 0;
+	if (is_all_sent_pkts_acked(r)) {
+		printf("process_received_ack_pkt: all packets sent have been acked\n");
+		try_end_connection(r);
 	}
 }
 
@@ -322,10 +333,12 @@ void process_received_data_pkt(rel_t *r, packet_t *packet) {
 		printf("Start to process received data packet...\n");
 		//printf("Packet seqno: %d, expecting: %d\n", packet->seqno, r->receiving_window->seqno_next_packet_expected);
 	}
+
 	printf("Packet seqno: %d, expecting: %d\n",
 						  packet->seqno, r->receiving_window->seqno_next_packet_expected);
 	if ((packet->seqno == r->receiving_window->seqno_next_packet_expected)) {
 		/* seqno is the one expected next */
+
 		uint32_t seqnoLastReceived =
 				r->receiving_window->last_packet_received == NULL ?
 						0 :
@@ -336,14 +349,19 @@ void process_received_data_pkt(rel_t *r, packet_t *packet) {
 		print_pointers_in_receive_window(r->receiving_window, r->config.window);
 
 		/* update receive window for the newly arrived packet */
-		if ((seqnoLastReceived - seqno_last_outputted) <= windowSize) {
+		if ((seqnoLastReceived - seqno_last_outputted) < windowSize) {
 			struct packet_node* node = (struct packet_node*) malloc(
 					sizeof(struct packet_node));
-			node->packet = packet;
+			packet_t * pack = (packet_t *) malloc(sizeof(packet_t));
+//			node->packet = packet;
+			memcpy(pack, packet, sizeof(packet_t));
+			node->packet = pack;
 			append_node_to_last_received(r, node);
-
 		}
 		rel_output(r);
+	} else if (packet->seqno
+			< r->receiving_window->seqno_next_packet_expected) { /* receive a data packet with a seqno less than expected, resend previous ack */
+		//TODO: #11 Resending ACK
 	}
 }
 
@@ -354,6 +372,10 @@ void process_received_data_pkt(rel_t *r, packet_t *packet) {
  */
 void rel_output(rel_t *r) {
 //	printf("IN rel_output\n");
+	if (!r) {
+		return;
+	}
+
 	conn_t *c = r->c;
 	size_t free_space = conn_bufspace(c);
 	/* no ack and no output if no space available */
@@ -381,7 +403,8 @@ void rel_output(rel_t *r) {
 		if (free_space > current_pck->len - SIZE_DATA_PCK_HEADER) { /* enough space to output a whole packet */
 			assert(bytesWritten == current_pck->len - SIZE_DATA_PCK_HEADER);
 			ackno_to_send = current_pck->seqno + 1;
-			if (current_pck->len == SIZE_EOF_PACKET) { /* EOF packet */
+			if (is_EOF_pkt(current_pck)) { /* EOF packet */
+				printf("rel_output: read EOF from sender\n");
 				r->read_EOF_from_sender = 1;
 			}
 			packet_ptr = packet_ptr->next;
@@ -396,12 +419,16 @@ void rel_output(rel_t *r) {
 		r->output_all_data = 1;
 	}
 
+	printf("In rel_output: ackno_to_send is %d\n", ackno_to_send);
+
 	/* send ack */
 	if (ackno_to_send > 1) {
+		//if (ackno_to_send != 3) {
 		send_ack_pck(r, ackno_to_send);
 		r->receiving_window->seqno_last_packet_outputted = ackno_to_send - 1;
+		//}
 	}
-	try_finish_receiver(r);
+	try_end_connection(r);
 }
 
 /**
@@ -418,13 +445,7 @@ void rel_timer() {
 		struct packet_node* node = get_first_unacked_pck(cur_rel);
 //		printf("check rel_timer()");
 		while (node) {
-			struct timeval* current_time = (struct timeval*) malloc(
-					sizeof(struct timeval));
-			if (gettimeofday(current_time, NULL) == -1) {
-				perror(
-						"Error generated from getting current time in rel_timer");
-			}
-
+			struct timeval* current_time = get_current_time();
 			struct timeval* diff = (struct timeval*) malloc(
 					sizeof(struct timeval));
 			timersub(current_time, node->time_sent, diff);
@@ -478,6 +499,7 @@ void print_sending_window(struct sliding_window_send * window) {
 
 void print_receiving_window(struct sliding_window_receive * window) {
 	if (debug) {
+		if (window == NULL) return;
 		printf("Printing receiving window related info....\n");
 		printf("Last packet read: %u, next packet expected: %u\n",
 				window->seqno_last_packet_outputted,
@@ -552,7 +574,7 @@ int is_greater_than(struct timeval* time1, int millisec2) {
 /*
  * computing its checksum and comparing to the checksum in the packet.
  * Returns 1 if packet is corrupted and 0 if it is not.
- *  @author Steve Wang
+ *  @author
  */
 int is_pkt_corrupted(packet_t* packet, size_t pkt_length) {
 	size_t packetLength = ntohs(packet->len);
@@ -575,6 +597,7 @@ void send_ack_pck(rel_t* r, int ack_num) {
 	ack_pck->cksum = get_check_sum(ack_pck, SIZE_ACK_PACKET);
 	conn_sendpkt(r->c, ack_pck, SIZE_ACK_PACKET);
 	free(ack_pck);
+	printf("Ack packet sent\n");
 }
 
 /**
@@ -622,7 +645,7 @@ struct packet_node* get_first_unacked_pck(rel_t* r) {
 	return packet_ptr;
 }
 
-/* @author Steve Wang*/
+/* @author */
 void convert_to_network_order(packet_t *packet) {
 	if (packet->len != SIZE_ACK_PACKET) { /* if data packet, convert its seqno */
 		packet->seqno = htonl(packet->seqno);
@@ -631,7 +654,7 @@ void convert_to_network_order(packet_t *packet) {
 	packet->ackno = htonl(packet->ackno);
 }
 
-/* @author Steve Wang*/
+/* @author */
 void convert_to_host_order(packet_t* packet) {
 	if (packet->len != SIZE_ACK_PACKET) { /* if data packet, convert its seqno */
 		packet->seqno = ntohl(packet->seqno);
@@ -641,7 +664,7 @@ void convert_to_host_order(packet_t* packet) {
 }
 
 /* return checksum in network byte order
- * @author Steve Wang */
+ * @author*/
 uint16_t get_check_sum(packet_t *packet, int packetLength) {
 //	packet->cksum = 0;
 	memset(&packet->cksum, 0, sizeof(packet->cksum));
@@ -649,24 +672,9 @@ uint16_t get_check_sum(packet_t *packet, int packetLength) {
 	return cksum(packet, packetLength);
 }
 
-/**
- * destroy r if all sent packets are acked and read EOF from input
- * return 1 if criteria met and destroyed successfully
- */
-int try_finish_sender(rel_t* r) {
-	if (r->all_pkts_acked && r->read_EOF_from_input) {
-		rel_destroy(r);
-		return 1;
-	}
-	return 0;
-}
-
-/**
- * destroy r if outputted all data and read EOF from sender
- * return 1 if criteria met and destroyed successfully
- */
-int try_finish_receiver(rel_t* r) {
-	if (r->read_EOF_from_sender && r->output_all_data) {
+int try_end_connection(rel_t* r) {
+	if (r->all_pkts_acked && r->read_EOF_from_input && r->read_EOF_from_sender
+			&& r->output_all_data) {
 		rel_destroy(r);
 		return 1;
 	}
@@ -676,4 +684,19 @@ int try_finish_receiver(rel_t* r) {
 int is_sending_window_full(rel_t* r) {
 	return r->sending_window->seqno_last_packet_sent
 			- r->sending_window->seqno_last_packet_acked >= r->config.window;
+}
+
+int is_EOF_pkt(packet_t* pkt) {
+//	return pkt->len == SIZE_EOF_PACKETs && strlen(pkt->data) == 0;
+	return pkt->len == SIZE_EOF_PACKET;
+}
+
+int is_new_ACK(uint32_t ackno, rel_t* r) {
+	return ackno > r->sending_window->seqno_last_packet_acked + 1;
+}
+
+int is_all_sent_pkts_acked(rel_t* r) {
+	r->all_pkts_acked = r->sending_window->seqno_last_packet_acked
+			== r->sending_window->seqno_last_packet_sent;
+	return r->all_pkts_acked;
 }
