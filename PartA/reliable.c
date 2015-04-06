@@ -307,24 +307,23 @@ void process_ack(rel_t *r, packet_t *packet) {
  * Receive a data packet from client in the server side
  */
 void process_received_data_pkt(rel_t *r, packet_t *packet) {
-	printf("Packet seqno: %d, expecting: %d\n", packet->seqno, r->receiving_window->seqno_next_packet_expected);
+	//printf("Packet seqno: %d, expecting: %d\n", packet->seqno, r->receiving_window->seqno_next_packet_expected);
 	/* if receive the next in-order expected packet and we are waiting for data packets process the packet */
 	if ((packet->seqno == r->receiving_window->seqno_next_packet_expected)
 			&& (r->server_state == WAITING_DATA_PACKET)) { //TODO: check if needed to do status check
-		printf("Inside this loop\n");
 		/* if we received an EOF packet signal to conn_output and destroy the connection if appropriate */
 		if (packet->len == SIZE_EOF_PACKET) {
 			r->server_state = SERVER_FINISHED;
 		}
 		/* we receive a non-EOF data packet, check receiving window size, and append */
 		else {
-			uint32_t seqnoLastReceived =
+			uint32_t seqnoLastReceived = r->receiving_window->last_packet_received == NULL? 0 :
 					r->receiving_window->last_packet_received->packet->seqno;
 			uint32_t seqnoLastRead = r->receiving_window->seqno_last_packet_read;
 			int windowSize = r->config.window;
-
+			//printf("seqnoLastReceived = %d, seqnoLastRead = %d, windowSize = %d\n", seqnoLastReceived, seqnoLastRead, windowSize);
 			/* update receive window for the newly arrived packet */
-			if ((seqnoLastReceived - seqnoLastRead + 1) < windowSize) {
+			if ((seqnoLastReceived - seqnoLastRead) < windowSize) {
 				struct packet_node* node = (struct packet_node*) malloc(
 						sizeof(struct packet_node));
 				node->packet = packet;
@@ -336,6 +335,7 @@ void process_received_data_pkt(rel_t *r, packet_t *packet) {
 			//	TODO if server flush output succeeded, not change state, if flush data failed, change state to waiting to flush
 			r->server_state = WAITING_TO_FLUSH_DATA;
 		}
+		rel_output(r);
 	}
 }
 
