@@ -695,6 +695,7 @@ int is_sending_window_full(rel_t* r) {
 
 int is_EOF_pkt(packet_t* pkt) {
 //	return pkt->len == SIZE_EOF_PACKETs && strlen(pkt->data) == 0;
+	printf("%s\n", pkt->data);
 	return pkt->len == SIZE_EOF_PACKET;
 }
 
