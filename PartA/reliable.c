@@ -209,10 +209,8 @@ void rel_read(rel_t *relState) {
 	printf("IN rel_read\n");
 	if (relState->client_state == WAITING_INPUT_DATA) {
 		packet_t *packet = create_packet_from_conninput(relState);
-		assert(packet!=NULL);
-//		print_pkt(packet, "packet", packet->len);
-//		printf("Packet size: %d\n", packet->len);
-//		printf("Packet cksum: %d\n", packet->cksum);
+//		assert(packet!=NULL);
+
 		/* in case there was data in the input and a packet was created, proceed to process, save
 		 and send the packet */
 		if (packet != NULL) {
@@ -248,11 +246,13 @@ void rel_read(rel_t *relState) {
 void appendPacketNodeToLastSent(rel_t *r, struct packet_node* node) {
 	if (r->sending_window->last_packet_sent == NULL) {
 		r->sending_window->last_packet_sent = node;
+		node->next = NULL;
 		return;
 	}
 	r->sending_window->last_packet_sent->next = node;
 	node->prev = r->sending_window->last_packet_sent;
 	r->sending_window->last_packet_sent = node;
+	node->next = NULL;
 }
 
 /**
@@ -261,11 +261,13 @@ void appendPacketNodeToLastSent(rel_t *r, struct packet_node* node) {
 void appendPacketNodeToLastReceived(rel_t *r, struct packet_node* node) {
 	if (r->receiving_window->last_packet_received == NULL) {
 		r->receiving_window->last_packet_received = node;
+		node->next = NULL;
 		return;
 	}
 	r->receiving_window->last_packet_received->next = node;
 	node->prev = r->receiving_window->last_packet_received;
 	r->receiving_window->last_packet_received = node;
+	node->next = NULL;
 }
 
 /* Server should process the data part of the packet
@@ -357,10 +359,12 @@ void rel_output(rel_t *r) {
 	int ackno_to_send = -1;
 
 	/* output data */
-	while (packet_ptr && free_space > 0) {
+	while (packet_ptr != NULL && free_space > 0) {
 		packet_t *current_pck = packet_ptr->packet;
+		//printf("packet data is: %s\n", current_pck->data);
 		int bytesWritten = conn_output(c, current_pck->data,
 				current_pck->len - SIZE_DATA_PCK_HEADER);
+		//printf("bytes written: %d\n", bytesWritten);
 		if (bytesWritten < 0) {
 			perror(
 					"Error generated from conn_output for output a whole packet");
