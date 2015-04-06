@@ -161,6 +161,7 @@ void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
 
 void rel_read(rel_t *s) {
 	if (s->c->sender_receiver == RECEIVER) {
+
 		//if already sent EOF to the sender
 		//  return;
 		//else
@@ -436,6 +437,7 @@ void convert_to_network_order(packet_t *packet) {
 	}
 	packet->len = htons(packet->len);
 	packet->ackno = htonl(packet->ackno);
+	packet->rwnd = htonl(packet->rwnd);
 }
 
 /* @author */
