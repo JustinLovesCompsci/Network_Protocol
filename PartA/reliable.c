@@ -147,8 +147,8 @@ void rel_destroy(rel_t *r) {
 	conn_destroy(r->c);
 
 	/* Free any other allocated memory here */
-	destroy_sending_window(r->sending_window);
-	destory_receiving_window(r->receiving_window);
+//	destroy_sending_window(r->sending_window);
+//	destory_receiving_window(r->receiving_window);
 	free(r);
 }
 
