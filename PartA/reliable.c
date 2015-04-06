@@ -182,9 +182,8 @@ void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
 		print_pkt(pkt, "packet", (int) pkt->len);
 	}
 
-	if (pkt->len == SIZE_ACK_PACKET) { /* ACK packet */
-		process_received_ack_pkt(r, pkt);
-	} else { /* data packet */
+	process_received_ack_pkt(r, pkt); /* regard both data and ack packet as Acks */
+	if (pkt->len != SIZE_ACK_PACKET) { /* data packet */
 		process_received_data_pkt(r, pkt);
 	}
 }
@@ -333,7 +332,6 @@ void process_received_data_pkt(rel_t *r, packet_t *packet) {
 					sizeof(struct packet_node));
 			node->packet = packet;
 			append_node_to_last_received(r, node);
-//			process_received_ack_pkt(r, packet); //TODO: check if needed
 		}
 		rel_output(r);
 	}
