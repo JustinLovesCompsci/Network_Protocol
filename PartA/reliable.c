@@ -83,7 +83,7 @@ struct sliding_window_receive * init_receiving_window();
 void destroy_sending_window(struct sliding_window_send*);
 void destory_receiving_window(struct sliding_window_receive*);
 void send_ack_pck(rel_t*, int);
-packet_t * create_EOF_packet();
+packet_t* create_EOF_packet();
 int is_greater_than(struct timeval*, int);
 void send_data_pck(rel_t*, struct packet_node*, struct timeval*);
 
@@ -96,7 +96,7 @@ uint16_t get_check_sum(packet_t*, int);
 
 struct packet_node* get_first_unread_pck(rel_t*);
 struct packet_node* get_first_unacked_pck(rel_t*);
-packet_t *create_packet_from_conninput(rel_t *);
+packet_t* create_packet_from_conninput(rel_t *);
 void add_ck_and_convert_order(packet_t*);
 void append_node_to_last_sent(rel_t*, struct packet_node*);
 void process_received_data_pkt(rel_t*, packet_t*);
@@ -202,7 +202,7 @@ void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
 }
 
 /**
- * function used by client (packet sending side)
+ * sender side
  * @author Steve (Siyang) Wang
  */
 void rel_read(rel_t *relState) {
@@ -215,7 +215,7 @@ void rel_read(rel_t *relState) {
 		if (packet != NULL) {
 			int packetLength = packet->len;
 			assert(packetLength >= SIZE_ACK_PACKET);
-			/* change client state according to whether we are sending EOF packet or normal packet */
+			/* change sender state according to whether we are sending EOF packet or normal packet */
 			relState->sender_state =
 					(packetLength == SIZE_EOF_PACKET) ?
 					WAITING_EOF_ACK :
@@ -271,19 +271,20 @@ void append_node_to_last_received(rel_t *r, struct packet_node* node) {
 	node->next = NULL;
 }
 
-/* Server should process the data part of the packet
- * client should process ack part of the packet. */
+/* Receiver should process the data part of the packet
+ * Sender should process ack part of the packet. */
 void process_packet(rel_t* r, packet_t* pkt) {
 	printf("Processing received packet\n");
-	/* Pass the packet to the server piece to process the data packet */
+	/* Pass the packet to the receiver piece to process the data packet */
 	process_received_data_pkt(r, pkt);
 
-	/* Pass the packet to the client piece to process the ackno field */
+	/* Pass the packet to the sender piece to process the ackno field */
 	process_ack(r, pkt);
 }
 
-/* processes received ack only packets which have passed the corruption check.
- This functionality belongs to the client and server piece.
+/**
+ *  processes received ack only packets which have passed the corruption check
+ *  belongs to the client and server piece
  */
 void process_ack(rel_t *r, packet_t *packet) {
 	/* proceed only if we are waiting for an ack */
@@ -300,8 +301,9 @@ void process_ack(rel_t *r, packet_t *packet) {
 			r->sender_state = SENDER_FINISHED;
 
 			/* destroy the connection only if the other side's client has finished transmitting */
-			if (r->receiver_state == RECEIVER_FINISHED)
+			if (r->receiver_state == RECEIVER_FINISHED) {
 				rel_destroy(r);
+			}
 		}
 	}
 }
@@ -546,11 +548,6 @@ int is_pkt_corrupted(packet_t* packet, size_t pkt_length) {
 	return expectedChecksum != computedChecksum;
 }
 
-/* if the packet is a data packet it additionally has a seqno that has
- to be converted to host byte order */
-//if (packet->len != SIZE_ACK_PACKET)
-//packet->seqno = ntohl(packet->seqno);
-//}
 void send_ack_pck(rel_t* r, int ack_num) {
 //TODO: make sure ack_num is not sent before
 	packet_t* ack_pck = (packet_t*) malloc(sizeof(packet_t));
@@ -626,10 +623,7 @@ packet_t *create_packet_from_conninput(rel_t *r) {
 	packet->seqno = (uint32_t) (r->sending_window->seqno_last_packet_sent + 1);
 	return packet;
 }
-/* Prepare for sending UDP packet
- * 1. computes and writes the checksum to the cksum field
- * 2. converts all necessary fields to network byte order
- */
+
 void add_ck_and_convert_order(packet_t* packet) {
 	packet->cksum = get_check_sum(packet, (int) packet->len);
 	assert(packet->cksum != 0);
