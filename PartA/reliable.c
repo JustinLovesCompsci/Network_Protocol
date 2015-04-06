@@ -89,6 +89,7 @@ int try_finish_sender(rel_t*);
 int try_finish_receiver(rel_t*);
 int is_sending_window_full(rel_t*);
 void process_received_ack_pkt(rel_t*, packet_t*);
+int is_EOF_pkt(packet_t*);
 
 /**
  * Creates a new reliable protocol session, returns NULL on failure.
@@ -381,7 +382,7 @@ void rel_output(rel_t *r) {
 		if (free_space > current_pck->len - SIZE_DATA_PCK_HEADER) { /* enough space to output a whole packet */
 			assert(bytesWritten == current_pck->len - SIZE_DATA_PCK_HEADER);
 			ackno_to_send = current_pck->seqno + 1;
-			if (current_pck->len == SIZE_EOF_PACKET) { /* EOF packet */
+			if (is_EOF_pkt(current_pck)) { /* EOF packet */
 				printf("rel_output: read EOF from sender\n");
 				r->read_EOF_from_sender = 1;
 			}
@@ -396,6 +397,8 @@ void rel_output(rel_t *r) {
 	if (packet_ptr == NULL) {
 		r->output_all_data = 1;
 	}
+
+	printf("In rel_output: ackno_to_send is %d\n", ackno_to_send);
 
 	/* send ack */
 	if (ackno_to_send > 1) {
@@ -575,6 +578,7 @@ void send_ack_pck(rel_t* r, int ack_num) {
 	ack_pck->cksum = get_check_sum(ack_pck, SIZE_ACK_PACKET);
 	conn_sendpkt(r->c, ack_pck, SIZE_ACK_PACKET);
 	free(ack_pck);
+	printf("Ack packet sent\n");
 }
 
 /**
@@ -673,4 +677,9 @@ int try_finish_receiver(rel_t* r) {
 int is_sending_window_full(rel_t* r) {
 	return r->sending_window->seqno_last_packet_sent
 			- r->sending_window->seqno_last_packet_acked >= r->config.window;
+}
+
+int is_EOF_pkt(packet_t* pkt) {
+//	return pkt->len == SIZE_EOF_PACKETs && strlen(pkt->data) == 0;
+	return pkt->len == SIZE_EOF_PACKET;
 }
