@@ -84,7 +84,6 @@ uint16_t get_check_sum(packet_t*, int);
 struct packet_node* get_first_unread_pck(rel_t*);
 struct packet_node* get_first_unacked_pck(rel_t*);
 packet_t* create_packet_from_conninput(rel_t *);
-void add_ck_and_convert_order(packet_t*);
 void append_node_to_last_sent(rel_t*, struct packet_node*);
 void process_received_data_pkt(rel_t*, packet_t*);
 void append_node_to_last_received(rel_t*, struct packet_node*);
@@ -175,7 +174,7 @@ void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
 	}
 
 	if (debug) {
-		printf("IN rel_recvpkt");
+		printf("IN rel_recvpkt, print host-order packet:");
 		print_pkt(pkt, "packet", (int) pkt->len);
 	}
 
@@ -395,7 +394,7 @@ void rel_timer() {
 			timersub(current_time, node->time_sent, diff);
 			if (is_greater_than(diff, cur_rel->config.timeout)) { /* Retransmit because exceeds timeout */
 				if (debug) {
-					printf("Found timeout packet and start to retransmit");
+					printf("Found timeout packet and start to retransmit:");
 					print_pkt(node->packet, "packet", node->packet->len);
 				}
 				send_data_pck(cur_rel, node, current_time);
@@ -536,11 +535,13 @@ void send_data_pck(rel_t*r, struct packet_node* pkt_ptr,
 		struct timeval* current_time) {
 	packet_t * packet = pkt_ptr->packet;
 	size_t pckLen = packet->len;
-	add_ck_and_convert_order(packet);
+	packet->cksum = get_check_sum(packet, (int) packet->len);
+	assert(packet->cksum != 0);
 	if (debug) {
-		printf("IN send_data_pck:");
+		printf("IN send_data_pck, print host order packet");
 		print_pkt(packet, "packet", packet->len);
 	}
+	convert_to_network_order(packet);
 	conn_sendpkt(r->c, packet, pckLen);
 	pkt_ptr->time_sent = current_time;
 }
@@ -602,12 +603,6 @@ packet_t *create_packet_from_conninput(rel_t *r) {
 	packet->ackno = (uint32_t) 1; /* not piggybacking acks, don't ack any packets */
 	packet->seqno = (uint32_t) (r->sending_window->seqno_last_packet_sent + 1);
 	return packet;
-}
-
-void add_ck_and_convert_order(packet_t* packet) {
-	packet->cksum = get_check_sum(packet, (int) packet->len);
-	assert(packet->cksum != 0);
-	convert_to_network_order(packet);
 }
 
 void convert_to_network_order(packet_t *packet) {
