@@ -186,19 +186,16 @@ void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
 void rel_read(rel_t *s) {
 	if (s->c->sender_receiver == RECEIVER) {
 
-		//if already sent EOF to the sender
-		//  return;
-		//else
-		//  send EOF to the sender
-
 		if (s->has_sent_EOF_packet == 1) {
 			return;
 		} else {
+
 //			packet_t * eof_packet = make_eof_packet();
 //			assert(sizeof(eof_packet) == SIZE_ACK_PACKET);
 //			conn_sendpkt(s->c, eof_packet, (size_t) SIZE_ACK_PACKET);
 //			s->has_sent_EOF_packet = 1;
 //			free(eof_packet);
+
 		}
 	} else //run in the sender mode
 	{
