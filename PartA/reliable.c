@@ -83,7 +83,6 @@ uint16_t get_check_sum(packet_t*, int);
 
 struct packet_node* get_first_unread_pck(rel_t*);
 struct packet_node* get_first_unacked_pck(rel_t*);
-packet_t* create_packet_from_conninput(rel_t *);
 void append_node_to_last_sent(rel_t*, struct packet_node*);
 void process_received_data_pkt(rel_t*, packet_t*);
 void append_node_to_last_received(rel_t*, struct packet_node*);
@@ -174,7 +173,7 @@ void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
 	}
 
 	if (debug) {
-		printf("IN rel_recvpkt, print host-order packet:");
+		printf("IN rel_recvpkt, print host-order non-corrupted packet:");
 		print_pkt(pkt, "packet", (int) pkt->len);
 	}
 
@@ -570,39 +569,6 @@ struct packet_node* get_first_unacked_pck(rel_t* r) {
 		packet_ptr = packet_ptr->prev;
 	}
 	return packet_ptr;
-}
-
-/*
- * Function called to: read from conn_input, create a packet from conn_input, and return it
- * Note: if no data in conn_input: return null
- * 		 if packet created: memory is allocated (to be freed later)
- * 		 checkSum not computed here: to be computed right before packet is to be sent
- * 		  and converted to network order
- * 		  @author Steve (Siyang) Wang
- */
-packet_t *create_packet_from_conninput(rel_t *r) {
-	packet_t *packet = (packet_t*) malloc(sizeof(packet_t));
-
-	/* read one full packet's worth of data from input */
-	int bytesRead = conn_input(r->c, packet->data, SIZE_MAX_PAYLOAD);
-	read_EOF_from_input = 0;
-	if (bytesRead == 0) {
-		free(packet);
-		return NULL;
-	}
-
-	if (bytesRead == -1) { /* read EOF from conn_input */
-		read_EOF_from_input = 1;
-	}
-
-	/* if we read an EOF create a zero-byte payload, else we read normal bytes that should be declared in the len field */
-	packet->len =
-			(bytesRead == -1) ?
-					(uint16_t) SIZE_EOF_PACKET :
-					(uint16_t) (SIZE_DATA_PCK_HEADER + bytesRead);
-	packet->ackno = (uint32_t) 1; /* not piggybacking acks, don't ack any packets */
-	packet->seqno = (uint32_t) (r->sending_window->seqno_last_packet_sent + 1);
-	return packet;
 }
 
 void convert_to_network_order(packet_t *packet) {
