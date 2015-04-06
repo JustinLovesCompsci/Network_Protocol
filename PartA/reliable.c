@@ -164,10 +164,14 @@ void rel_demux(const struct config_common *cc,
 		const struct sockaddr_storage *ss, packet_t *pkt, size_t len) {
 }
 
-/**
- * called by both sender and receiver
- * @author Justin (Zihao) Zhang
+/*method called by both server(sender) and client(receiver), responsible for:
+ * 	checking checksum for checking corrupted data (drop if corrupted)
+ * 	convert to host byte order
+ * 	check if ack only or actual data included,
+ * 		and pass the packet to corresponding handler
+ * 	@Justin (Zihao) Zhang
  */
+
 void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
 	printf("IN rel_recvpkt\n");
 	if (is_pkt_corrupted(pkt, n)) {
@@ -184,6 +188,7 @@ void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
 
 	if (pkt->len != SIZE_ACK_PACKET) { /* data packet */
 		process_received_data_pkt(r, pkt);
+
 	}
 	process_received_ack_pkt(r, pkt); /* regard both data and ack packet as Acks */
 }
@@ -309,6 +314,7 @@ void process_received_ack_pkt(rel_t *r, packet_t *pkt) {
  * process a data packet from sender
  */
 void process_received_data_pkt(rel_t *r, packet_t *packet) {
+
 	if (debug) {
 		printf("Start to process received data packet...\n");
 		//printf("Packet seqno: %d, expecting: %d\n", packet->seqno, r->receiving_window->seqno_next_packet_expected);
@@ -332,6 +338,7 @@ void process_received_data_pkt(rel_t *r, packet_t *packet) {
 					sizeof(struct packet_node));
 			node->packet = packet;
 			append_node_to_last_received(r, node);
+
 		}
 		rel_output(r);
 	} else if (packet->seqno
