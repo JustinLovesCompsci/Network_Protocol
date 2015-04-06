@@ -69,6 +69,12 @@ struct reliable_state {
 	int output_all_data;
 };
 
+struct retransmit_node {
+	struct retransmit_node* prev;
+	struct retransmit_node* next;
+	struct packet_node* packet;
+};
+
 /* debug functions */
 void print_config(struct config_common);
 void print_rel(rel_t *);
@@ -100,6 +106,7 @@ int is_new_ACK(uint32_t, rel_t*);
 int check_all_sent_pkts_acked(rel_t*);
 struct timeval* get_current_time();
 int try_end_connection(rel_t*);
+void prepare_slow_start(rel_t*);
 
 rel_t *rel_list;
 int debug = 0;
@@ -188,15 +195,42 @@ void rel_read(rel_t *s) {
 void rel_output(rel_t *r) {
 }
 
+/**
+ * Retransmit any packets that have not been acked and exceed timeout in sender
+ * If so, perform slow start and retransmit the packets
+ * Divide sshreshold by 2 and set congestion window to be 1
+ * @author Justin (Zihao) Zhang
+ */
 void rel_timer() {
-	/* Retransmit any packets that need to be retransmitted */
+	rel_t* cur_rel = rel_list;
 
-	// Loop through the last_sent_packets to check if anyone of the packets
-	// 	a. have not received an ack yet, and
-	// 	b. has timed out
-	// If so, retransmit those packets and do multiplicative decrease:
-	//	ssthresh = cwnd/2; cwnd = 1;
-	// and perform slow start again
+	while (cur_rel) {
+		struct packet_node* node = get_first_unacked_pck(cur_rel);
+
+		while (node) {
+			struct timeval* current_time = get_current_time();
+			struct timeval* diff = (struct timeval*) malloc(
+					sizeof(struct timeval));
+			timersub(current_time, node->time_sent, diff);
+			//printf("diff is %d:%d\n", diff->tv_sec, diff->tv_usec);
+
+			if (is_greater_than(diff, cur_rel->config.timeout)) { /* Retransmit because exceeds timeout */
+				if (debug) {
+					printf("Found timeout packet and start to retransmit:");
+					print_pkt(node->packet, "packet", node->packet->len);
+				}
+				/* perform slow start */
+				prepare_slow_start(cur_rel);
+
+				/* retransmit EOF first, and then timeout packets */
+
+				send_data_pck(cur_rel, node, current_time);
+			}
+			free(diff);
+			node = node->next;
+		}
+		cur_rel = rel_list->next;
+	}
 }
 
 ////////////////////////////////////////////////////////////////////////
@@ -262,6 +296,11 @@ void print_pointers_in_receive_window(struct sliding_window_receive * window,
 ////////////////////////////////////////////////////////////////////////
 ////////////////////////// Helper functions /////////////////////////////
 ////////////////////////////////////////////////////////////////////////
+
+void prepare_slow_start(rel_t* r) {
+	r->ssthresh = r->congestion_window / 2;
+	r->congestion_window = 1;
+}
 
 void process_received_ack_pkt(rel_t *r, packet_t *pkt) {
 	if (debug) {
@@ -353,6 +392,8 @@ void append_node_to_last_sent(rel_t *r, struct packet_node* node) {
 	r->sending_window->last_packet_sent = node;
 	node->next = NULL;
 }
+//
+//void append_to_last_retransmit(struct retransmit_node* node, )
 
 /**
  * append a packet node to the last of a receive sliding window
