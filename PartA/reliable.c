@@ -242,6 +242,7 @@ void rel_read(rel_t *relState) {
 			perror("Error generated from getting current time in rel_timer\n");
 		}
 
+		/* initialize packet node */
 		struct packet_node* node = (struct packet_node*) malloc(
 				sizeof(struct packet_node));
 		node->packet = packet;
@@ -277,6 +278,7 @@ void append_node_to_last_sent(rel_t *r, struct packet_node* node) {
  * append a packet node to the last of a receive sliding window
  */
 void append_node_to_last_received(rel_t *r, struct packet_node* node) {
+	r->receiving_window->seqno_next_packet_expected = node->packet->seqno + 1;
 	if (r->receiving_window->last_packet_received == NULL) {
 		r->receiving_window->last_packet_received = node;
 		node->next = NULL;
@@ -313,13 +315,13 @@ void process_received_data_pkt(rel_t *r, packet_t *packet) {
 
 		printf("seqnoLastReceived = %d, seqnoLastRead = %d, windowSize = %d\n",
 				seqnoLastReceived, seqno_last_outputted, windowSize);
+
 		/* update receive window for the newly arrived packet */
 		if ((seqnoLastReceived - seqno_last_outputted) < windowSize) {
 			struct packet_node* node = (struct packet_node*) malloc(
 					sizeof(struct packet_node));
 			node->packet = packet;
 			append_node_to_last_received(r, node);
-			r->receiving_window->seqno_next_packet_expected = packet->seqno + 1;
 		}
 		rel_output(r);
 	}
