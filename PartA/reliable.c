@@ -85,8 +85,6 @@ struct packet_node* get_first_unacked_pck(rel_t*);
 void append_node_to_last_sent(rel_t*, struct packet_node*);
 void process_received_data_pkt(rel_t*, packet_t*);
 void append_node_to_last_received(rel_t*, struct packet_node*);
-int try_finish_sender(rel_t*);
-int try_finish_receiver(rel_t*);
 int is_sending_window_full(rel_t*);
 void process_received_ack_pkt(rel_t*, packet_t*);
 int is_EOF_pkt(packet_t*);
@@ -226,6 +224,11 @@ void rel_read(rel_t *relState) {
 		}
 
 		if (bytesRead == -1) { /* read EOF from conn_input */
+			if (relState->read_EOF_from_input) { /* have read EOF from input before, return without re-sending */
+				printf("re-read EOF from input\n");
+				free(packet);
+				return;
+			}
 			printf("read EOF from input\n");
 			relState->read_EOF_from_input = 1;
 			packet->len = (uint16_t) SIZE_EOF_PACKET;
@@ -345,12 +348,11 @@ void process_received_data_pkt(rel_t *r, packet_t *packet) {
 					sizeof(struct packet_node));
 			node->packet = packet;
 			append_node_to_last_received(r, node);
-
 		}
 		rel_output(r);
 	} else if (packet->seqno
 			< r->receiving_window->seqno_next_packet_expected) { /* receive a data packet with a seqno less than expected, resend previous ack */
-
+		//TODO: #11 Resending ACK
 	}
 }
 
@@ -361,6 +363,10 @@ void process_received_data_pkt(rel_t *r, packet_t *packet) {
  */
 void rel_output(rel_t *r) {
 //	printf("IN rel_output\n");
+	if (!r) {
+		return;
+	}
+
 	conn_t *c = r->c;
 	size_t free_space = conn_bufspace(c);
 	/* no ack and no output if no space available */
@@ -653,30 +659,6 @@ uint16_t get_check_sum(packet_t *packet, int packetLength) {
 int try_end_connection(rel_t* r) {
 	if (r->all_pkts_acked && r->read_EOF_from_input && r->read_EOF_from_sender
 			&& r->output_all_data) {
-		rel_destroy(r);
-		return 1;
-	}
-	return 0;
-}
-
-/**
- * destroy r if all sent packets are acked and read EOF from input
- * return 1 if criteria met and destroyed successfully
- */
-int try_finish_sender(rel_t* r) {
-	if (r->all_pkts_acked && r->read_EOF_from_input) {
-		rel_destroy(r);
-		return 1;
-	}
-	return 0;
-}
-
-/**
- * destroy r if outputted all data and read EOF from sender
- * return 1 if criteria met and destroyed successfully
- */
-int try_finish_receiver(rel_t* r) {
-	if (r->read_EOF_from_sender && r->output_all_data) {
 		rel_destroy(r);
 		return 1;
 	}
