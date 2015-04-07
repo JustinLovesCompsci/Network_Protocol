@@ -199,7 +199,7 @@ void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
 	}
 
 	if (pkt->len == SIZE_ACK_PACKET) { /* ack packet */
-		assert(r->c->sender_receiver == RECEIVER);
+		assert(r->c->sender_receiver == SENDER);
 		/* Check if it's (triply) duplicated acks */
 		if (r->sending_window->seqno_last_packet_acked == pkt->ackno) {
 			r->num_duplicated_ack_received++;
@@ -227,6 +227,7 @@ void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
 	} else { /* data (including eof) packet */
 		process_received_ack_pkt(r, pkt);
 		process_received_data_pkt(r, pkt);
+
 	}
 
 
