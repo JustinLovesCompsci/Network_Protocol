@@ -270,10 +270,6 @@ void rel_read(rel_t *relState) {
 		if (relState->has_sent_EOF_packet == 1) {
 			return;
 		} else {
-			/* initialize packet node */
-
-			/* receiver still needs to keep link list of packet sent,
-			 * needed for calculating receiver window size*/
 			send_initial_eof(relState);
 		}
 	} else /* sender mode */
@@ -434,8 +430,6 @@ void rel_timer() {
 
 			if (is_retransmitting(cur_rel)) {
 				prepare_slow_start(cur_rel);
-				struct packet_node* eof = get_receiver_EOF_node(cur_rel);
-				send_data_pck(cur_rel, eof, get_current_time()); /* retransmit EOF first */
 			}
 		}
 		cur_rel = rel_list->next;
