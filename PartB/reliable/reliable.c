@@ -112,7 +112,7 @@ int is_window_available_to_send_one(rel_t*);
 int min(int, int);
 void send_eof_pck(rel_t*, struct packet_node*, struct timeval*);
 uint32_t get_window_buffer_size(rel_t *);
-int is_congestion_window_full(rel_t* );
+int is_congestion_window_full(rel_t*);
 
 rel_t *rel_list;
 
@@ -123,7 +123,8 @@ rel_t *rel_list;
 rel_t *
 rel_create(conn_t *c, const struct sockaddr_storage *ss,
 		const struct config_common *cc) {
-	if (debug) printf("In rel_create\n");
+	if (debug)
+		printf("In rel_create\n");
 	rel_t *r;
 
 	r = xmalloc(sizeof(*r));
@@ -229,11 +230,11 @@ void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
 		process_received_data_pkt(r, pkt);
 	}
 
-
 }
 
 void rel_read(rel_t *relState) {
-	if (debug) printf("In rel_read\n");
+	if (debug)
+		printf("In rel_read\n");
 	if (relState->c->sender_receiver == RECEIVER) {
 		if (relState->has_sent_EOF_packet == 1) {
 			// go to waiting for incoming ack
@@ -267,65 +268,122 @@ void rel_read(rel_t *relState) {
 	{
 		//same logic as lab 1
 		for (;;) {
-				if (is_sending_window_full(relState) || is_congestion_window_full(relState) || relState->read_EOF_from_input) {
-					if (debug) {
-						printf(
-								"window size is full or have already read EOF before from input\n");
-					}
-					return;
+			if (is_sending_window_full(relState)
+					|| is_congestion_window_full(relState)
+					|| relState->read_EOF_from_input) {
+				if (debug) {
+					printf(
+							"window size is full or have already read EOF before from input\n");
 				}
-
-				packet_t *packet = (packet_t*) malloc(sizeof(packet_t));
-				int bytesRead = conn_input(relState->c, packet->data, SIZE_MAX_PAYLOAD);
-
-				relState->read_EOF_from_input = 0;
-				if (bytesRead == 0) { /* no data is read from conn_input */
-					free(packet);
-					if (debug) {
-						printf("no data is available at input now\n");
-					}
-					return;
-				}
-
-				if (bytesRead == -1) { /* read EOF from conn_input */
-					if (debug)
-						printf("read EOF from input\n");
-					relState->read_EOF_from_input = 1;
-					packet->len = (uint16_t) SIZE_EOF_PACKET;
-
-				} else { /* read some data from conn_input */
-					//check if window size exceeded
-					if (get_window_buffer_size(relState))
-					packet->len = (uint16_t) (SIZE_DATA_PCK_HEADER + bytesRead);
-				}
-
-				packet->ackno = relState->receiving_window->seqno_last_packet_outputted
-						+ 1;
-				packet->seqno =
-						(uint32_t) (relState->sending_window->seqno_last_packet_sent + 1);
-				packet->rwnd = get_window_buffer_size(relState); //TODO: current window size?
-
-				/* initialize packet node */
-				struct packet_node* node = (struct packet_node*) malloc(
-						sizeof(struct packet_node));
-		//		node->packet = packet;
-				packet_t * pack = (packet_t *) malloc(sizeof(packet_t));
-				memcpy(pack, packet, sizeof(packet_t));
-				node->packet = pack;
-
-				/* send the packet */
-				append_node_to_last_sent(relState, node);
-				struct timeval* current_time = get_current_time();
-				send_data_pck(relState, node, current_time);
-
-				if (try_end_connection(relState)) {
-					return;
-				}
+				return;
 			}
+
+			packet_t *packet = (packet_t*) malloc(sizeof(packet_t));
+			int bytesRead = conn_input(relState->c, packet->data,
+			SIZE_MAX_PAYLOAD);
+
+			relState->read_EOF_from_input = 0;
+			if (bytesRead == 0) { /* no data is read from conn_input */
+				free(packet);
+				if (debug) {
+					printf("no data is available at input now\n");
+				}
+				return;
+			}
+
+			if (bytesRead == -1) { /* read EOF from conn_input */
+				if (debug)
+					printf("read EOF from input\n");
+				relState->read_EOF_from_input = 1;
+				packet->len = (uint16_t) SIZE_EOF_PACKET;
+
+			} else { /* read some data from conn_input */
+				//check if window size exceeded
+				if (get_window_buffer_size(relState))
+					packet->len = (uint16_t) (SIZE_DATA_PCK_HEADER + bytesRead);
+			}
+
+			packet->ackno =
+					relState->receiving_window->seqno_last_packet_outputted + 1;
+			packet->seqno =
+					(uint32_t) (relState->sending_window->seqno_last_packet_sent
+							+ 1);
+			packet->rwnd = get_window_buffer_size(relState); //TODO: current window size?
+
+			/* initialize packet node */
+			struct packet_node* node = (struct packet_node*) malloc(
+					sizeof(struct packet_node));
+			//		node->packet = packet;
+			packet_t * pack = (packet_t *) malloc(sizeof(packet_t));
+			memcpy(pack, packet, sizeof(packet_t));
+			node->packet = pack;
+
+			/* send the packet */
+			append_node_to_last_sent(relState, node);
+			struct timeval* current_time = get_current_time();
+			send_data_pck(relState, node, current_time);
+
+			if (try_end_connection(relState)) {
+				return;
+			}
+		}
 	}
 }
 
 void rel_output(rel_t *r) {
+	//	printf("IN rel_output\n");
+
+	conn_t *c = r->c;
+	size_t free_space = conn_bufspace(c);
+	if (free_space == 0) { /* no ack and no output if no space available */
+		return;
+	}
+
+	struct packet_node* packet_ptr = get_first_unread_pck(r);
+	int ackno_to_send = -1;
+
+	/* output data */
+	while (packet_ptr != NULL && free_space > 0) {
+		packet_t *current_pck = packet_ptr->packet;
+		assert(current_pck != NULL);
+		//		printf("packet data is: %s\n", current_pck->data);
+		int bytesWritten = conn_output(c, current_pck->data,
+				current_pck->len - SIZE_DATA_PCK_HEADER);
+		//		printf("bytes written: %d\n", bytesWritten);
+		if (bytesWritten < 0) {
+			perror(
+					"Error generated from conn_output for output a whole packet");
+		}
+
+		if (free_space > current_pck->len - SIZE_DATA_PCK_HEADER) { /* flushed completely a whole packet */
+			assert(bytesWritten == current_pck->len - SIZE_DATA_PCK_HEADER);
+			ackno_to_send = current_pck->seqno + 1;
+			if (is_EOF_pkt(current_pck)) { /* EOF packet */
+				if (debug)
+					printf("rel_output: read EOF from sender\n");
+				r->read_EOF_from_sender = 1;
+			}
+			packet_ptr = packet_ptr->next;
+		} else { /* flushed only partial packet */
+			*current_pck->data += bytesWritten; //NOTE: check pointer increment correctness
+			current_pck->len = current_pck->len - bytesWritten;
+		}
+		free_space = conn_bufspace(c);
+	}
+
+	if (packet_ptr == NULL) {
+		r->output_all_data = 1;
+	}
+
+	if (debug)
+		printf("In rel_output: ackno_to_send is %d\n", ackno_to_send);
+
+	/* send ack */
+	if (ackno_to_send > 1) {
+		send_ack_pck(r, ackno_to_send);
+		r->receiving_window->seqno_last_packet_outputted = ackno_to_send - 1;
+	}
+	try_end_connection(r);
 }
 
 /**
@@ -436,13 +494,12 @@ void print_pointers_in_receive_window(struct sliding_window_receive * window,
 ////////////////////////// Helper functions /////////////////////////////
 ////////////////////////////////////////////////////////////////////////
 
-
 // TODO: test see if need plus 1
 uint32_t get_window_buffer_size(rel_t * relState) {
-	if (relState->c->sender_receiver == 1){ //sender = 1
+	if (relState->c->sender_receiver == 1) { //sender = 1
 		return (relState->sending_window->seqno_last_packet_sent
 				- relState->sending_window->seqno_last_packet_acked);
-	}else{
+	} else {
 		return (relState->receiving_window->seqno_next_packet_expected
 				- relState->receiving_window->seqno_last_packet_outputted);
 	}
@@ -793,9 +850,10 @@ int is_sending_window_full(rel_t* r) {
 /*
  * Check if the congestion window is full
  */
-int is_congestion_window_full(rel_t* r){
+int is_congestion_window_full(rel_t* r) {
 	return r->sending_window->seqno_last_packet_sent
-			- r->sending_window->seqno_last_packet_acked >= (uint32_t) r->congestion_window;
+			- r->sending_window->seqno_last_packet_acked
+			>= (uint32_t) r->congestion_window;
 }
 
 int is_EOF_pkt(packet_t* pkt) {
