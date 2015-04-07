@@ -35,6 +35,7 @@ struct sliding_window_send {
 	uint32_t seqno_last_packet_acked; /* sequence number of the last packet receiver received */
 	struct packet_node* last_packet_sent; /* a doubly linked list of sent packets */
 	uint32_t seqno_last_packet_sent; /* sequence number of the last sent packet */
+
 	uint32_t receiver_window_size; /* the window size at receiver (obtained from a ack packet) */
 	struct packet_node* pkt_to_retransmit; /* a pointer to the packet for retransmitting in the linked list */
 };
@@ -71,12 +72,6 @@ struct reliable_state {
 	int read_EOF_from_input;
 	int all_pkts_acked;
 	int output_all_data;
-};
-
-struct retransmit_node {
-	struct retransmit_node* prev;
-	struct retransmit_node* next;
-	struct packet_node* packet;
 };
 
 /* debug functions */
@@ -600,6 +595,8 @@ struct sliding_window_send * init_sending_window() {
 	window->seqno_last_packet_acked = 0;
 	window->seqno_last_packet_sent = 0;
 	window->last_packet_sent = NULL;
+	window->pkt_to_retransmit = NULL;
+	window->receiver_window_size = INT_MAX;
 	return window;
 }
 

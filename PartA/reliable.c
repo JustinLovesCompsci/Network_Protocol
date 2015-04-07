@@ -367,7 +367,6 @@ void process_received_data_pkt(rel_t *r, packet_t *packet) {
 		rel_output(r);
 	} else if (packet->seqno
 			< r->receiving_window->seqno_next_packet_expected) { /* receive a data packet with a seqno less than expected, resend previous ack */
-		//TODO: #11 Resending ACK
 		if (debug)
 			printf("sending ack with ackno %d\n",
 					r->receiving_window->seqno_next_packet_expected);
