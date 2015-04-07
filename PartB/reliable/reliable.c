@@ -239,7 +239,7 @@ void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
 		}
 
 	} else { /* data (including eof) packet */
-		process_received_ack_pkt(r, pkt);
+//		process_received_ack_pkt(r, pkt);
 		process_received_data_pkt(r, pkt);
 	}
 }
@@ -260,7 +260,7 @@ void send_initial_eof(rel_t* relState) {
 	/* send the packet */
 	append_node_to_last_sent(relState, node);
 	struct timeval* current_time = get_current_time();
-	send_eof_pck(relState, node, current_time);
+//	send_eof_pck(relState, node, current_time);
 	relState->has_sent_EOF_packet = 1;
 }
 
@@ -572,6 +572,7 @@ void process_received_ack_pkt(rel_t *r, packet_t *pkt) {
 
 	/* update last packet acked pointer in sending window if new ack arrives */
 	if (is_new_ACK(pkt->ackno, r)) {
+		printf("It's a new ack\n");
 		r->sending_window->seqno_last_packet_acked = pkt->ackno - 1;
 		r->sending_window->receiver_window_size = pkt->rwnd;
 		if (!is_sending_window_full(r) && !is_congestion_window_full(r)) {
@@ -896,7 +897,8 @@ int is_ACK_pkt(packet_t * pkt) {
 }
 
 int is_new_ACK(uint32_t ackno, rel_t* r) {
-	return ackno > r->sending_window->seqno_last_packet_acked + 1;
+	printf("ack ackno: %d, expecting: %d\n", ackno, r->sending_window->seqno_last_packet_acked+1);
+	return ackno > r->sending_window->seqno_last_packet_acked;
 }
 
 int check_all_sent_pkts_acked(rel_t* r) {
