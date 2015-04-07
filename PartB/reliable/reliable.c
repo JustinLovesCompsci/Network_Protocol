@@ -503,10 +503,10 @@ void print_pointers_in_receive_window(struct sliding_window_receive * window,
 
 // TODO: test see if need plus 1
 uint32_t get_window_buffer_size(rel_t * relState) {
-	if (relState->c->sender_receiver == 1) { //sender = 1
+	if (relState->c->sender_receiver == 1) { /* sender */
 		return (relState->sending_window->seqno_last_packet_sent
 				- relState->sending_window->seqno_last_packet_acked);
-	} else {
+	} else { /* receiver */
 		return (relState->receiving_window->seqno_next_packet_expected
 				- relState->receiving_window->seqno_last_packet_outputted);
 	}
