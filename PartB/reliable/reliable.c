@@ -269,6 +269,10 @@ void rel_read(rel_t *relState) {
 	} else //run in the sender mode
 	{
 		//same logic as lab 1
+		if (is_retransmitting(relState)) {
+			return;
+		}
+
 		for (;;) {
 			if (is_sending_window_full(relState)
 					|| is_congestion_window_full(relState)
