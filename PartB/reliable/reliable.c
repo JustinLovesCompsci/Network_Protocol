@@ -205,17 +205,20 @@ void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
 
 	if (is_ACK_pkt(pkt)) { /* ack packet */
 		assert(r->c->sender_receiver == SENDER);
-		/* Check if it's (triply) duplicated acks */
-		if (r->sending_window->seqno_last_packet_acked >= pkt->ackno) {
+		/* udpate corresponding fields of rel_t */
+		if (r->sending_window->seqno_last_packet_acked == pkt->ackno) {
 			r->num_duplicated_ack_received++;
-		} else {
+		} else if (r->sending_window->seqno_last_packet_acked < pkt->ackno){
 			r->num_duplicated_ack_received = 1;
+			r->sending_window->seqno_last_packet_acked = pkt->ackno;
 		}
+
 
 		// If it is a triply duplicated acks,
 		//	1. ssthresh = cwnd/2
 		//	2. cwnd = ssthresh
 		//	3. do fast retransmission (need to determine which packets to retransmit)
+		/* Check if it's (triply) duplicated acks */
 		if (r->num_duplicated_ack_received >= 3) {
 			r->ssthresh = (int) r->congestion_window / 2;
 			r->congestion_window = r->ssthresh;
