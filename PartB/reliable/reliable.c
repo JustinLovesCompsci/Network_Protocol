@@ -109,6 +109,7 @@ int check_all_sent_pkts_acked(rel_t*);
 struct timeval* get_current_time();
 int try_end_connection(rel_t*);
 void prepare_slow_start(rel_t*);
+struct packet_node* get_receiver_EOF_node(rel_t*);
 
 rel_t *rel_list;
 
@@ -283,6 +284,7 @@ void rel_timer() {
 				prepare_slow_start(cur_rel);
 
 				/* retransmit EOF first, and then timeout packets */
+				struct packet_node* eof = get_receiver_EOF_node(cur_rel);
 
 				send_data_pck(cur_rel, node, current_time);
 			}
@@ -654,4 +656,8 @@ int check_all_sent_pkts_acked(rel_t* r) {
 	r->all_pkts_acked = r->sending_window->seqno_last_packet_acked
 			== r->sending_window->seqno_last_packet_sent;
 	return r->all_pkts_acked;
+}
+
+struct packet_node* get_receiver_EOF_node(rel_t* r) {
+	return r->sending_window->last_packet_sent;
 }
