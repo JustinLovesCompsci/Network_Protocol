@@ -263,7 +263,7 @@ void rel_read(rel_t *relState) {
 			// go to waiting for incoming ack
 			return;
 		} else {/* receiver still needs to keep link list of packet sent,
-			 	 * needed for calculating receiver window size*/
+		 * needed for calculating receiver window size*/
 
 			/* initialize packet node */
 			send_initial_eof(relState);
@@ -283,7 +283,7 @@ void rel_read(rel_t *relState) {
 				if (debug) {
 					printf(
 							"abort generating packet: is retransmitting, or sending window full, "
-							"or congestion window full or have already read EOF before from input\n");
+									"or congestion window full or have already read EOF before from input\n");
 				}
 				return;
 			}
@@ -309,7 +309,7 @@ void rel_read(rel_t *relState) {
 
 			} else { /* read some data from conn_input */
 				//check if window size exceeded already done in the beginning of while loop
-					packet->len = (uint16_t) (SIZE_DATA_PCK_HEADER + bytesRead);
+				packet->len = (uint16_t) (SIZE_DATA_PCK_HEADER + bytesRead);
 			}
 
 			packet->ackno =
@@ -317,7 +317,7 @@ void rel_read(rel_t *relState) {
 			packet->seqno =
 					(uint32_t) (relState->sending_window->seqno_last_packet_sent
 							+ 1);
-			packet->rwnd = get_current_buffer_size(relState); //TODO: current window size?
+			packet->rwnd = get_current_buffer_size(relState); //TODO: need test here current window size?
 
 			/* initialize packet node */
 			struct packet_node* node = (struct packet_node*) malloc(
