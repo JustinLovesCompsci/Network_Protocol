@@ -115,6 +115,7 @@ void send_eof_pck(rel_t*, struct packet_node*, struct timeval*);
 uint32_t get_current_buffer_size(rel_t *);
 int is_congestion_window_full(rel_t*);
 int is_retransmitting(rel_t*);
+void send_initial_eof(rel_t*);
 
 rel_t *rel_list;
 
@@ -234,6 +235,26 @@ void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
 
 }
 
+// called by receiver
+void send_initial_eof(rel_t* relState) {
+
+	/* initialize packet node */
+	struct packet_node* node = (struct packet_node*) malloc(
+			sizeof(struct packet_node));
+	packet_t* EOF_pack = (packet_t*) malloc(sizeof(packet_t));
+	EOF_pack->len = SIZE_EOF_PACKET;
+	EOF_pack->rwnd = relState->config.window;
+	EOF_pack->ackno = 0; // used for receiver to check if its
+	EOF_pack->seqno = 1; // first packet has seqno of 1
+	node->packet = EOF_pack;
+	/* send the packet */
+	append_node_to_last_sent(relState, node);
+	struct timeval* current_time = get_current_time();
+	send_eof_pck(relState, node, current_time);
+
+	relState->has_sent_EOF_packet = 1;
+}
+
 void rel_read(rel_t *relState) {
 	if (debug)
 		printf("In rel_read\n");
@@ -241,26 +262,11 @@ void rel_read(rel_t *relState) {
 		if (relState->has_sent_EOF_packet == 1) {
 			// go to waiting for incoming ack
 			return;
-		} else {
-			/* receiver still needs to keep link list of packet sent,
-			 * needed for calculating receiver window size*/
+		} else {/* receiver still needs to keep link list of packet sent,
+			 	 * needed for calculating receiver window size*/
 
 			/* initialize packet node */
-			struct packet_node* node = (struct packet_node*) malloc(
-					sizeof(struct packet_node));
-			packet_t * EOF_pack = (packet_t *) malloc(sizeof(packet_t));
-			EOF_pack->len = SIZE_EOF_PACKET;
-			EOF_pack->rwnd = relState->config.window;
-			EOF_pack->ackno = 0; // used for receiver to check if its
-			EOF_pack->seqno = 1; // first packet has seqno of 1
-			node->packet = EOF_pack;
-
-			/* send the packet */
-			append_node_to_last_sent(relState, node);
-			struct timeval* current_time = get_current_time();
-			send_eof_pck(relState, node, current_time);
-
-			relState->has_sent_EOF_packet = 1;
+			send_initial_eof(relState);
 
 			if (try_end_connection(relState)) {
 				return;
@@ -269,17 +275,15 @@ void rel_read(rel_t *relState) {
 	} else //run in the sender mode
 	{
 		//same logic as lab 1
-		if (is_retransmitting(relState)) {
-			return;
-		}
-
 		for (;;) {
 			if (is_sending_window_full(relState)
 					|| is_congestion_window_full(relState)
+					|| is_retransmitting(relState)
 					|| relState->read_EOF_from_input) {
 				if (debug) {
 					printf(
-							"window size is full or have already read EOF before from input\n");
+							"abort generating packet: is retransmitting, or sending window full, "
+							"or congestion window full or have already read EOF before from input\n");
 				}
 				return;
 			}
@@ -304,8 +308,7 @@ void rel_read(rel_t *relState) {
 				packet->len = (uint16_t) SIZE_EOF_PACKET;
 
 			} else { /* read some data from conn_input */
-				//check if window size exceeded
-				if (get_current_buffer_size(relState))
+				//check if window size exceeded already done in the beginning of while loop
 					packet->len = (uint16_t) (SIZE_DATA_PCK_HEADER + bytesRead);
 			}
 
