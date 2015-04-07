@@ -529,6 +529,7 @@ int is_duplicate_ACK(rel_t* r, packet_t* pkt) {
  */
 int send_retransmit_pkts(rel_t* r) {
 	while (is_retransmitting(r)) {
+//		printf("Start/continue retransmitting packets\n");
 		if (is_window_available_to_send_one(r)) {
 
 			send_data_pck(r, r->sending_window->pkt_to_retransmit_start,
