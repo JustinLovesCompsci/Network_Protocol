@@ -37,8 +37,8 @@ struct sliding_window_send {
 	uint32_t seqno_last_packet_sent; /* sequence number of the last sent packet */
 
 	uint32_t receiver_window_size; /* the window size at receiver (obtained from a ack packet) */
-	struct packet_node* pkt_to_retransmit_start; /* a pointer to the packet for retransmitting in the linked list */
-	struct packet_node* pkt_to_retransmit_end;
+	struct packet_node* pkt_to_retransmit_start; /* a pointer to the start packet for retransmitting in the linked list */
+	struct packet_node* pkt_to_retransmit_end; /* a pointer to the end packet for retransmitting in the linked list */
 };
 
 /**
@@ -338,7 +338,6 @@ void rel_read(rel_t *relState) {
 
 void rel_output(rel_t *r) {
 	//	printf("IN rel_output\n");
-
 	conn_t *c = r->c;
 	size_t free_space = conn_bufspace(c);
 	if (free_space == 0) { /* no ack and no output if no space available */
@@ -352,10 +351,8 @@ void rel_output(rel_t *r) {
 	while (packet_ptr != NULL && free_space > 0) {
 		packet_t *current_pck = packet_ptr->packet;
 		assert(current_pck != NULL);
-		//		printf("packet data is: %s\n", current_pck->data);
 		int bytesWritten = conn_output(c, current_pck->data,
 				current_pck->len - SIZE_DATA_PCK_HEADER);
-		//		printf("bytes written: %d\n", bytesWritten);
 		if (bytesWritten < 0) {
 			perror(
 					"Error generated from conn_output for output a whole packet");
@@ -364,12 +361,14 @@ void rel_output(rel_t *r) {
 		if (free_space > current_pck->len - SIZE_DATA_PCK_HEADER) { /* flushed completely a whole packet */
 			assert(bytesWritten == current_pck->len - SIZE_DATA_PCK_HEADER);
 			ackno_to_send = current_pck->seqno + 1;
+
 			if (is_EOF_pkt(current_pck)) { /* EOF packet */
 				if (debug)
 					printf("rel_output: read EOF from sender\n");
 				r->read_EOF_from_sender = 1;
 			}
 			packet_ptr = packet_ptr->next;
+
 		} else { /* flushed only partial packet */
 			*current_pck->data += bytesWritten; //NOTE: check pointer increment correctness
 			current_pck->len = current_pck->len - bytesWritten;
