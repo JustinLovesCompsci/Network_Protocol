@@ -498,7 +498,7 @@ void print_pointers_in_receive_window(struct sliding_window_receive * window,
 // TODO: test see if need plus 1
 
 uint32_t get_current_buffer_size(rel_t * relState) {
-	if (relState->c->sender_receiver == SENDER) { //sender = 1
+	if (relState->c->sender_receiver == SENDER) {
 		return (relState->sending_window->seqno_last_packet_sent
 				- relState->sending_window->seqno_last_packet_acked);
 	} else { /* receiver */
@@ -740,6 +740,7 @@ void send_ack_pck(rel_t* r, int ack_num) {
 	packet_t* ack_pck = (packet_t*) malloc(sizeof(packet_t));
 	ack_pck->ackno = ack_num;
 	ack_pck->len = SIZE_ACK_PACKET;
+	ack_pck->rwnd = get_current_buffer_size(r);
 	convert_to_network_order(ack_pck);
 	ack_pck->cksum = get_check_sum(ack_pck, SIZE_ACK_PACKET);
 	conn_sendpkt(r->c, ack_pck, SIZE_ACK_PACKET);
