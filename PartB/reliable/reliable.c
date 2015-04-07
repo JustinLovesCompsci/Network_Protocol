@@ -15,7 +15,7 @@
 
 #include "rlib.h"
 
-int debug = 0;
+int debug = 1;
 
 /* define constants */
 #define SIZE_ACK_PACKET 12 // size of an ack packet
@@ -204,7 +204,7 @@ void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
 	}
 
 	if (is_ACK_pkt(pkt)) { /* ack packet */
-		assert(r->c->sender_receiver == SENDER);
+//		assert(r->c->sender_receiver == SENDER);
 		/* udpate corresponding fields of rel_t */
 		if (r->sending_window->seqno_last_packet_acked == pkt->ackno) { // duplicated ack
 			r->num_duplicated_ack_received++;
@@ -222,8 +222,11 @@ void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
 		if (r->num_duplicated_ack_received >= 3) { /* triply duplicated ack */
 			r->ssthresh = (int) r->congestion_window / 2;
 			r->congestion_window = r->ssthresh;
-			// TODO: fast retransmission
-
+			/* set fast retransmission pointers */
+			r->sending_window->pkt_to_retransmit_start = get_first_unacked_pck(r);
+			assert(r->sending_window->pkt_to_retransmit_start != NULL);
+			assert(get_first_unacked_pck(r)->packet->seqno == r->sending_window->seqno_last_packet_acked + 1);
+			r->sending_window->pkt_to_retransmit_end = r->sending_window->last_packet_sent;
 		} else {
 			// If receive normal ack,
 			//	1. increment cwnd (cwnd = cwnd + 1/cwnd)
@@ -419,6 +422,7 @@ void rel_timer() {
 				if (is_greater_than(diff, cur_rel->config.timeout)) { /* Retransmit because exceeds timeout */
 					free(current_time);
 					free(diff);
+
 					if (debug) {
 						printf("Found timeout packet and start to retransmit:");
 						print_pkt(node->packet, "packet", node->packet->len);
