@@ -758,6 +758,7 @@ void convert_to_host_order(packet_t* packet) {
 }
 
 /**
+ * Calculate the checksum of a packet
  * @param packet is in network byte order
  * @return checksum in network byte order
  */
@@ -766,6 +767,11 @@ uint16_t get_check_sum(packet_t *packet, int packetLength) {
 	return cksum(packet, packetLength);
 }
 
+/*
+ * Check if all the conditions for ending a connection have been met
+ * If so, destroy connection and return 1
+ * Else return 0
+ */
 int try_end_connection(rel_t* r) {
 	if (r->all_pkts_acked && r->read_EOF_from_input && r->read_EOF_from_sender
 			&& r->output_all_data) {
@@ -776,11 +782,17 @@ int try_end_connection(rel_t* r) {
 }
 
 // TODO: updated helper method to compare the min with config.window
+/*
+ * Check if the sending window is full
+ */
 int is_sending_window_full(rel_t* r) {
 	return r->sending_window->seqno_last_packet_sent
 			- r->sending_window->seqno_last_packet_acked >= r->config.window;
 }
 
+/*
+ * Check if the congestion window is full
+ */
 int is_congestion_window_full(rel_t* r){
 	return r->sending_window->seqno_last_packet_sent
 			- r->sending_window->seqno_last_packet_acked >= (uint32_t) r->congestion_window;
