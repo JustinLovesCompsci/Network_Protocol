@@ -15,7 +15,7 @@
 
 #include "rlib.h"
 
-int debug = 0;
+int debug = 1;
 
 /* define constants */
 #define SIZE_ACK_PACKET 12 // size of an ack packet
@@ -204,28 +204,38 @@ void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
 	}
 
 	if (is_ACK_pkt(pkt)) { /* ack packet */
-		assert(r->c->sender_receiver == SENDER);
-		/* Check if it's (triply) duplicated acks */
-		if (r->sending_window->seqno_last_packet_acked >= pkt->ackno) {
+//		assert(r->c->sender_receiver == SENDER);
+		/* udpate corresponding fields of rel_t */
+		if (r->sending_window->seqno_last_packet_acked == pkt->ackno) { // duplicated ack
 			r->num_duplicated_ack_received++;
-		} else {
+		} else if (r->sending_window->seqno_last_packet_acked < pkt->ackno){ // new ack packet
 			r->num_duplicated_ack_received = 1;
+			r->sending_window->seqno_last_packet_acked = pkt->ackno;
 		}
+
 
 		// If it is a triply duplicated acks,
 		//	1. ssthresh = cwnd/2
 		//	2. cwnd = ssthresh
 		//	3. do fast retransmission (need to determine which packets to retransmit)
-		if (r->num_duplicated_ack_received >= 3) {
+		/* Check if it's (triply) duplicated acks */
+		if (r->num_duplicated_ack_received >= 3) { /* triply duplicated ack */
 			r->ssthresh = (int) r->congestion_window / 2;
 			r->congestion_window = r->ssthresh;
-			// TODO: fast retransmission
-
+			/* set fast retransmission pointers */
+			r->sending_window->pkt_to_retransmit_start = get_first_unacked_pck(r);
+			assert(r->sending_window->pkt_to_retransmit_start != NULL);
+			assert(get_first_unacked_pck(r)->packet->seqno == r->sending_window->seqno_last_packet_acked + 1);
+			r->sending_window->pkt_to_retransmit_end = r->sending_window->last_packet_sent;
 		} else {
 			// If receive normal ack,
 			//	1. increment cwnd (cwnd = cwnd + 1/cwnd)
 			//	2. call conn_output etc.; probably similar to part a
-			r->congestion_window += 1 / (r->congestion_window);
+			if (r->congestion_window < r->ssthresh) { /* slow start */
+				r->congestion_window++;
+			} else {
+				r->congestion_window += 1 / (r->congestion_window); /* congestion avoidance */
+			}
 			process_received_ack_pkt(r, pkt);
 		}
 
@@ -263,6 +273,8 @@ void rel_read(rel_t *relState) {
 		if (relState->has_sent_EOF_packet == 1) {
 			return;
 		} else {
+			/* initialize packet node */
+
 			/* receiver still needs to keep link list of packet sent,
 			 * needed for calculating receiver window size*/
 			send_initial_eof(relState);
@@ -310,6 +322,7 @@ void rel_read(rel_t *relState) {
 			packet->seqno =
 					(uint32_t) (relState->sending_window->seqno_last_packet_sent
 							+ 1);
+			//TODO: need test here current window size?
 			packet->rwnd = relState->config.window;
 
 			/* initialize packet node */
@@ -409,6 +422,7 @@ void rel_timer() {
 				if (is_greater_than(diff, cur_rel->config.timeout)) { /* Retransmit because exceeds timeout */
 					free(current_time);
 					free(diff);
+
 					if (debug) {
 						printf("Found timeout packet and start to retransmit:");
 						print_pkt(node->packet, "packet", node->packet->len);
