@@ -251,8 +251,8 @@ void rel_read(rel_t *relState) {
 			packet_t * EOF_pack = (packet_t *) malloc(sizeof(packet_t));
 			EOF_pack->len = SIZE_EOF_PACKET;
 			EOF_pack->rwnd = relState->config.window;
-			EOF_pack->ackno = 1;
-			EOF_pack->seqno = 1;
+			EOF_pack->ackno = 0; // used for receiver to check if its
+			EOF_pack->seqno = 1; // first packet has seqno of 1
 			node->packet = EOF_pack;
 
 			/* send the packet */
