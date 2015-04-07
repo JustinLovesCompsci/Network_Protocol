@@ -260,7 +260,7 @@ void send_initial_eof(rel_t* relState) {
 	/* send the packet */
 	append_node_to_last_sent(relState, node);
 	struct timeval* current_time = get_current_time();
-//	send_eof_pck(relState, node, current_time);
+	send_eof_pck(relState, node, current_time);
 	relState->has_sent_EOF_packet = 1;
 }
 
