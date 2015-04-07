@@ -201,10 +201,10 @@ void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
 		print_pkt(pkt, "packet", (int) pkt->len);
 	}
 
-	if (pkt->len == SIZE_ACK_PACKET) { /* ack packet */
-		assert(r->c->sender_receiver == RECEIVER);
+	if (is_EOF_pkt(pkt)) { /* ack packet */
+		assert(r->c->sender_receiver == SENDER);
 		/* Check if it's (triply) duplicated acks */
-		if (r->sending_window->seqno_last_packet_acked == pkt->ackno) {
+		if (r->sending_window->seqno_last_packet_acked >= pkt->ackno) {
 			r->num_duplicated_ack_received++;
 		} else {
 			r->num_duplicated_ack_received = 1;
