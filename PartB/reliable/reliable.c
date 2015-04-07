@@ -566,7 +566,7 @@ void prepare_slow_start(rel_t* r) {
 
 void process_received_ack_pkt(rel_t *r, packet_t *pkt) {
 	if (debug) {
-		printf("Received ACK packet\n");
+		printf("Process packet for ACK\n");
 	}
 
 	/* update last packet acked pointer in sending window if new ack arrives */
