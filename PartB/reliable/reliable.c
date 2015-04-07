@@ -213,7 +213,7 @@ void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
 //	}
 //	process_received_ack_pkt(r, pkt); /* process both data and ack packet as Acks */
 
-	// TODO: If receive normal ack, first check if it is a triply duplicated ack. If not,
+	// If receive normal ack, first check if it is a triply duplicated ack. If not,
 	//	1. increment cwnd (cwnd = cwnd + 1/cwnd)
 	// 	2. set last ack no. and set duplicated_ack_counter to be 1
 	//	3. call conn_output etc.; probably similar to part a
@@ -222,7 +222,6 @@ void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
 	//	2. cwnd = ssthresh
 	//	3. do fast retransmission (need to determine which packets to retransmit)
 
-	// TODO: handle EOF and data packets
 }
 
 void rel_read(rel_t *s) {
