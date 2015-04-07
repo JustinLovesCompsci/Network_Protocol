@@ -223,7 +223,10 @@ void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
 			/* set fast retransmission pointers */
 			r->sending_window->pkt_to_retransmit_start = get_first_unacked_pck(
 					r);
-			assert(r->sending_window->pkt_to_retransmit_start != NULL);
+			if (r->sending_window->pkt_to_retransmit_start == NULL) {
+				return;
+			}
+//			assert(r->sending_window->pkt_to_retransmit_start != NULL);
 			assert(
 					get_first_unacked_pck(r)->packet->seqno
 							== r->sending_window->seqno_last_packet_acked + 1);
@@ -239,7 +242,7 @@ void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
 		}
 
 	} else { /* data (including eof) packet */
-//		process_received_ack_pkt(r, pkt);
+		process_received_ack_pkt(r, pkt);
 		process_received_data_pkt(r, pkt);
 	}
 }
@@ -593,8 +596,8 @@ void process_received_data_pkt(rel_t *r, packet_t *packet) {
 	}
 
 //	if (debug)
-		printf("Packet seqno: %d, expecting: %d\n", packet->seqno,
-				r->receiving_window->seqno_next_packet_expected);
+	printf("Packet seqno: %d, expecting: %d\n", packet->seqno,
+			r->receiving_window->seqno_next_packet_expected);
 
 	if ((packet->seqno == r->receiving_window->seqno_next_packet_expected)) {
 		/* seqno is the one expected next */
@@ -750,7 +753,7 @@ void send_ack_pck(rel_t* r, int ack_num) {
 	packet_t* ack_pck = (packet_t*) malloc(sizeof(packet_t));
 	ack_pck->ackno = ack_num;
 	ack_pck->len = SIZE_ACK_PACKET;
-	ack_pck->rwnd = get_current_buffer_size(r);
+	ack_pck->rwnd = r->config.window; //TODO: check if this field is the receiver window fixed size
 	convert_to_network_order(ack_pck);
 	ack_pck->cksum = get_check_sum(ack_pck, SIZE_ACK_PACKET);
 	conn_sendpkt(r->c, ack_pck, SIZE_ACK_PACKET);
@@ -897,7 +900,8 @@ int is_ACK_pkt(packet_t * pkt) {
 }
 
 int is_new_ACK(uint32_t ackno, rel_t* r) {
-	printf("ack ackno: %d, expecting: %d\n", ackno, r->sending_window->seqno_last_packet_acked+1);
+	printf("ack ackno: %d, expecting: %d\n", ackno,
+			r->sending_window->seqno_last_packet_acked + 1);
 	return ackno > r->sending_window->seqno_last_packet_acked;
 }
 
