@@ -812,7 +812,7 @@ struct packet_node* get_first_unacked_pck(rel_t* r) {
 }
 
 void convert_to_network_order(packet_t *packet) {
-	if (packet->len != SIZE_ACK_PACKET) { /* if data packet, convert its seqno */
+	if (!is_ACK_pkt(packet)) {
 		packet->seqno = htonl(packet->seqno);
 	}
 	packet->len = htons(packet->len);
@@ -821,7 +821,7 @@ void convert_to_network_order(packet_t *packet) {
 }
 
 void convert_to_host_order(packet_t* packet) {
-	if (packet->len != SIZE_ACK_PACKET) { /* if data packet, convert its seqno */
+	if (!is_ACK_pkt(packet)) {
 		packet->seqno = ntohl(packet->seqno);
 	}
 	packet->len = ntohs(packet->len);
