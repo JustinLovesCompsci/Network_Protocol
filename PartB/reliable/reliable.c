@@ -206,9 +206,9 @@ void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
 	if (is_ACK_pkt(pkt)) { /* ack packet */
 		assert(r->c->sender_receiver == SENDER);
 		/* udpate corresponding fields of rel_t */
-		if (r->sending_window->seqno_last_packet_acked == pkt->ackno) {
+		if (r->sending_window->seqno_last_packet_acked == pkt->ackno) { // duplicated ack
 			r->num_duplicated_ack_received++;
-		} else if (r->sending_window->seqno_last_packet_acked < pkt->ackno){
+		} else if (r->sending_window->seqno_last_packet_acked < pkt->ackno){ // new ack packet
 			r->num_duplicated_ack_received = 1;
 			r->sending_window->seqno_last_packet_acked = pkt->ackno;
 		}
@@ -219,7 +219,7 @@ void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
 		//	2. cwnd = ssthresh
 		//	3. do fast retransmission (need to determine which packets to retransmit)
 		/* Check if it's (triply) duplicated acks */
-		if (r->num_duplicated_ack_received >= 3) {
+		if (r->num_duplicated_ack_received >= 3) { /* triply duplicated ack */
 			r->ssthresh = (int) r->congestion_window / 2;
 			r->congestion_window = r->ssthresh;
 			// TODO: fast retransmission
@@ -228,7 +228,11 @@ void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
 			// If receive normal ack,
 			//	1. increment cwnd (cwnd = cwnd + 1/cwnd)
 			//	2. call conn_output etc.; probably similar to part a
-			r->congestion_window += 1 / (r->congestion_window);
+			if (r->congestion_window < r->ssthresh) { /* slow start */
+				r->congestion_window++;
+			} else {
+				r->congestion_window += 1 / (r->congestion_window); /* congestion avoidance */
+			}
 			process_received_ack_pkt(r, pkt);
 		}
 
