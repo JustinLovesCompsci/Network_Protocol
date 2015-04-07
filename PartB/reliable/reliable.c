@@ -15,7 +15,7 @@
 
 #include "rlib.h"
 
-int debug = 0;
+int debug = 1;
 
 /* define constants */
 #define SIZE_ACK_PACKET 12 // size of an ack packet
@@ -204,7 +204,7 @@ void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
 	}
 
 	if (is_ACK_pkt(pkt)) { /* ack packet */
-		assert(r->c->sender_receiver == SENDER);
+//		assert(r->c->sender_receiver == SENDER);
 		/* udpate corresponding fields of rel_t */
 		if (r->sending_window->seqno_last_packet_acked == pkt->ackno) { // duplicated ack
 			r->num_duplicated_ack_received++;
