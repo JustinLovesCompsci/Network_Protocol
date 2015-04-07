@@ -184,7 +184,6 @@ void rel_demux(const struct config_common *cc,
 }
 
 void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
-	if (debug) printf("In rel_recvpkt\n");
 	/* Check if packet is corrupted */
 	if (is_pkt_corrupted(pkt, n)) {
 		if (debug)
