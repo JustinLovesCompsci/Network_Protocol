@@ -74,7 +74,7 @@ xmalloc (size_t n)
 }
 #endif /* !DMALLOC */
 
-#if NEED_CLOCK_GETTIME
+//#if NEED_CLOCK_GETTIME
 int
 clock_gettime (int id, struct timespec *tp)
 {
@@ -93,7 +93,7 @@ clock_gettime (int id, struct timespec *tp)
     return -1;
   }
 }
-#endif /* NEED_CLOCK_GETTIME */
+//#endif /* NEED_CLOCK_GETTIME */
 
 void
 print_pkt (const packet_t *buf, const char *op, int n)
