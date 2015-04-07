@@ -244,14 +244,13 @@ void send_initial_eof(rel_t* relState) {
 	packet_t* EOF_pack = (packet_t*) malloc(sizeof(packet_t));
 	EOF_pack->len = SIZE_EOF_PACKET;
 	EOF_pack->rwnd = relState->config.window;
-	EOF_pack->ackno = 0; // used for receiver to check if its
-	EOF_pack->seqno = 1; // first packet has seqno of 1
+	EOF_pack->ackno = 0;
+	EOF_pack->seqno = INIT_SEQ_NUM;
 	node->packet = EOF_pack;
 	/* send the packet */
 	append_node_to_last_sent(relState, node);
 	struct timeval* current_time = get_current_time();
 	send_eof_pck(relState, node, current_time);
-
 	relState->has_sent_EOF_packet = 1;
 }
 
@@ -260,21 +259,14 @@ void rel_read(rel_t *relState) {
 		printf("In rel_read\n");
 	if (relState->c->sender_receiver == RECEIVER) {
 		if (relState->has_sent_EOF_packet == 1) {
-			// go to waiting for incoming ack
 			return;
-		} else {/* receiver still needs to keep link list of packet sent,
-			 	 * needed for calculating receiver window size*/
-
-			/* initialize packet node */
+		} else {
+			/* receiver still needs to keep link list of packet sent,
+			 * needed for calculating receiver window size*/
 			send_initial_eof(relState);
-
-			if (try_end_connection(relState)) {
-				return;
-			}
 		}
-	} else //run in the sender mode
+	} else /* sender mode */
 	{
-		//same logic as lab 1
 		for (;;) {
 			if (is_sending_window_full(relState)
 					|| is_congestion_window_full(relState)
@@ -283,7 +275,7 @@ void rel_read(rel_t *relState) {
 				if (debug) {
 					printf(
 							"abort generating packet: is retransmitting, or sending window full, "
-							"or congestion window full or have already read EOF before from input\n");
+									"or congestion window full or have already read EOF before from input\n");
 				}
 				return;
 			}
@@ -308,8 +300,7 @@ void rel_read(rel_t *relState) {
 				packet->len = (uint16_t) SIZE_EOF_PACKET;
 
 			} else { /* read some data from conn_input */
-				//check if window size exceeded already done in the beginning of while loop
-					packet->len = (uint16_t) (SIZE_DATA_PCK_HEADER + bytesRead);
+				packet->len = (uint16_t) (SIZE_DATA_PCK_HEADER + bytesRead);
 			}
 
 			packet->ackno =
@@ -317,12 +308,11 @@ void rel_read(rel_t *relState) {
 			packet->seqno =
 					(uint32_t) (relState->sending_window->seqno_last_packet_sent
 							+ 1);
-			packet->rwnd = get_current_buffer_size(relState); //TODO: current window size?
+			packet->rwnd = relState->config.window;
 
 			/* initialize packet node */
 			struct packet_node* node = (struct packet_node*) malloc(
 					sizeof(struct packet_node));
-			//		node->packet = packet;
 			packet_t * pack = (packet_t *) malloc(sizeof(packet_t));
 			memcpy(pack, packet, sizeof(packet_t));
 			node->packet = pack;
