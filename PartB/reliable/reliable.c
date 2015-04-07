@@ -126,6 +126,7 @@ rel_t *rel_list;
 rel_t *
 rel_create(conn_t *c, const struct sockaddr_storage *ss,
 		const struct config_common *cc) {
+	if (debug) printf("In rel_create\n");
 	rel_t *r;
 
 	r = xmalloc(sizeof(*r));
@@ -165,6 +166,7 @@ rel_create(conn_t *c, const struct sockaddr_storage *ss,
 
 void rel_destroy(rel_t *r) {
 //	conn_destroy(r->c);
+	printf("In rel_destroy\n");
 
 	/* Free any other allocated memory here */
 	if (debug)
@@ -185,6 +187,7 @@ void rel_demux(const struct config_common *cc,
 }
 
 void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
+	if (debug) printf("In rel_recvpkt\n");
 	/* Check if packet is corrupted */
 	if (is_pkt_corrupted(pkt, n)) {
 		if (debug)
@@ -239,6 +242,7 @@ void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
 }
 
 void rel_read(rel_t *relState) {
+	if (debug) printf("In rel_read\n");
 	if (relState->c->sender_receiver == RECEIVER) {
 		if (relState->has_sent_EOF_packet == 1) {
 			// go to waiting for incoming ack
@@ -339,6 +343,7 @@ void rel_output(rel_t *r) {
  * @author Justin (Zihao) Zhang
  */
 void rel_timer() {
+//	printf("In rel_timer\n");
 	rel_t* cur_rel = rel_list;
 
 	while (cur_rel) {
