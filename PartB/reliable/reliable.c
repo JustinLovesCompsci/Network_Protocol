@@ -368,13 +368,10 @@ void rel_timer() {
 
 			if (cur_rel->sending_window->pkt_to_retransmit) {
 				prepare_slow_start(cur_rel);
-
-				/* retransmit EOF first */
 				struct packet_node* eof = get_receiver_EOF_node(cur_rel);
-				send_data_pck(cur_rel, eof, get_current_time());
+				send_data_pck(cur_rel, eof, get_current_time()); /* retransmit EOF first */
 			}
 		}
-
 		cur_rel = rel_list->next;
 	}
 }
