@@ -35,6 +35,7 @@ struct sliding_window_send {
 	uint32_t seqno_last_packet_acked; /* sequence number of the last packet receiver received */
 	struct packet_node* last_packet_sent; /* a doubly linked list of sent packets */
 	uint32_t seqno_last_packet_sent; /* sequence number of the last sent packet */
+
 	uint32_t receiver_window_size; /* the window size at receiver (obtained from a ack packet) */
 	struct packet_node* pkt_to_retransmit; /* a pointer to the packet for retransmitting in the linked list */
 };
@@ -71,12 +72,6 @@ struct reliable_state {
 	int read_EOF_from_input;
 	int all_pkts_acked;
 	int output_all_data;
-};
-
-struct retransmit_node {
-	struct retransmit_node* prev;
-	struct retransmit_node* next;
-	struct packet_node* packet;
 };
 
 /* debug functions */
@@ -239,7 +234,6 @@ void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
 //	process_received_ack_pkt(r, pkt); /* process both data and ack packet as Acks */
 
 
-	// TODO: handle EOF and data packets
 }
 
 void rel_read(rel_t *relState) {
@@ -373,13 +367,10 @@ void rel_timer() {
 
 			if (cur_rel->sending_window->pkt_to_retransmit) {
 				prepare_slow_start(cur_rel);
-
-				/* retransmit EOF first */
 				struct packet_node* eof = get_receiver_EOF_node(cur_rel);
-				send_data_pck(cur_rel, eof, get_current_time());
+				send_data_pck(cur_rel, eof, get_current_time()); /* retransmit EOF first */
 			}
 		}
-
 		cur_rel = rel_list->next;
 	}
 }
@@ -615,6 +606,8 @@ struct sliding_window_send * init_sending_window() {
 	window->seqno_last_packet_acked = 0;
 	window->seqno_last_packet_sent = 0;
 	window->last_packet_sent = NULL;
+	window->pkt_to_retransmit = NULL;
+	window->receiver_window_size = INT_MAX;
 	return window;
 }
 
