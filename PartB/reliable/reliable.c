@@ -15,7 +15,7 @@
 
 #include "rlib.h"
 
-int debug = 1;
+int debug = 0;
 
 /* define constants */
 #define SIZE_ACK_PACKET 12 // size of an ack packet
@@ -205,6 +205,7 @@ void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
 	}
 
 	if (is_ACK_pkt(pkt)) { /* ack packet */
+		printf("This is an ACK packet\n");
 //		assert(r->c->sender_receiver == SENDER);
 
 		if (is_duplicate_ACK(r, pkt)) { // duplicated ack
@@ -591,7 +592,7 @@ void process_received_data_pkt(rel_t *r, packet_t *packet) {
 		printf("Start to process received data packet...\n");
 	}
 
-	if (debug)
+//	if (debug)
 		printf("Packet seqno: %d, expecting: %d\n", packet->seqno,
 				r->receiving_window->seqno_next_packet_expected);
 
