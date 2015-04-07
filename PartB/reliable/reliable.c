@@ -58,7 +58,7 @@ struct reliable_state {
 	int ssthresh; // ssh threshold
 	float congestion_window; // different from receiver_window_size; find the min of two
 	int num_duplicated_ack_received;
-	int num_packets_sent_in_session; /* number of packets that have been sent in 1 session */
+	int num_packets_sent_in_session; /* number of packets that have been sent in the current session (RTT) */
 
 	/* For receiver */
 	int has_sent_EOF_packet;
