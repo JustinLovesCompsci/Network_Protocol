@@ -18,7 +18,7 @@
 int debug = 1;
 
 /* define constants */
-#define SIZE_ACK_PACKET 12 // size of an ack packet
+#define SIZE_ACK_PACKET 12
 #define SIZE_EOF_PACKET 16
 #define SIZE_DATA_PCK_HEADER 16
 #define SIZE_MAX_PAYLOAD 500
@@ -891,7 +891,7 @@ int is_EOF_pkt(packet_t* pkt) {
  */
 int is_ACK_pkt(packet_t * pkt) {
 	//TODO: check more than length
-	return pkt->len == SIZE_EOF_PACKET;
+	return pkt->len == SIZE_ACK_PACKET;
 }
 
 int is_new_ACK(uint32_t ackno, rel_t* r) {
