@@ -400,7 +400,7 @@ conn_mkevents (void)
   else
     e[0].fd = -1;
   e[1].fd = 2;			/* Do catch errors on stderr */
-    
+
   for (c = conn_list; c; c = c->next) {
     if (c->rpoll) {
       e[c->rpoll].fd = c->rfd;
@@ -769,7 +769,7 @@ listen_on (int dgram, struct sockaddr_storage *ss)
     return -1;
   }
   err = getnameinfo ((struct sockaddr *) ss, len, NULL, 0,
-		     portname, sizeof (portname), 
+		     portname, sizeof (portname),
 		     (dgram ? NI_DGRAM : 0) | NI_NUMERICSERV);
   if (err) {
     fprintf (stderr, "%s\n", gai_strerror (err));
@@ -947,7 +947,7 @@ main (int argc, char **argv)
   struct sockaddr_storage sl, sr;
   conn_t *cn = conn_alloc ();
   c.single_connection = 1;
-  
+
   if(c.sender_receiver == SENDER)
   {
     infile = open(input, O_RDONLY);
@@ -976,7 +976,7 @@ main (int argc, char **argv)
       || get_address (&sl, 1, 1, sr.ss_family, local) < 0
       || (cn->nfd = listen_on (1, &sl)) < 0)
       exit (1);
-  if (connect (cn->nfd, (struct sockaddr *) &sr, addrsize (&sr)) < 0) 
+  if (connect (cn->nfd, (struct sockaddr *) &sr, addrsize (&sr)) < 0)
   {
     perror ("connect error");
     exit (1);
