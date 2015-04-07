@@ -35,6 +35,7 @@ struct sliding_window_send {
 	uint32_t seqno_last_packet_acked; /* sequence number of the last packet receiver received */
 	struct packet_node* last_packet_sent; /* a doubly linked list of sent packets */
 	uint32_t seqno_last_packet_sent; /* sequence number of the last sent packet */
+
 	uint32_t receiver_window_size; /* the window size at receiver (obtained from a ack packet) */
 	struct packet_node* pkt_to_retransmit; /* a pointer to the packet for retransmitting in the linked list */
 };
@@ -71,12 +72,6 @@ struct reliable_state {
 	int read_EOF_from_input;
 	int all_pkts_acked;
 	int output_all_data;
-};
-
-struct retransmit_node {
-	struct retransmit_node* prev;
-	struct retransmit_node* next;
-	struct packet_node* packet;
 };
 
 /* debug functions */
@@ -116,6 +111,8 @@ int send_retransmit_pkts(rel_t*);
 int is_window_available_to_send_one(rel_t*);
 int min(int, int);
 void send_eof_pck(rel_t*, struct packet_node*, struct timeval*);
+uint32_t get_window_buffer_size(rel_t *);
+int is_congestion_window_full(rel_t* );
 
 rel_t *rel_list;
 
@@ -186,6 +183,15 @@ void rel_demux(const struct config_common *cc,
 	//leave it blank here!!!
 }
 
+// TODO: If receive normal ack, first check if it is a triply duplicated ack. If not,
+//	1. increment cwnd (cwnd = cwnd + 1/cwnd)
+// 	2. set last ack no. and set duplicated_ack_counter to be 1
+//	3. call conn_output etc.; probably similar to part a
+// If it is a triply duplicated acks,
+//	1. ssthresh = cwnd/2
+//	2. cwnd = ssthresh
+//	3. do fast retransmission (need to determine which packets to retransmit)
+
 void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
 	if (debug) printf("In rel_recvpkt\n");
 	/* Check if packet is corrupted */
@@ -230,14 +236,6 @@ void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
 //	}
 //	process_received_ack_pkt(r, pkt); /* process both data and ack packet as Acks */
 
-	// If receive normal ack, first check if it is a triply duplicated ack. If not,
-	//	1. increment cwnd (cwnd = cwnd + 1/cwnd)
-	// 	2. set last ack no. and set duplicated_ack_counter to be 1
-	//	3. call conn_output etc.; probably similar to part a
-	// If it is a triply duplicated acks,
-	//	1. ssthresh = cwnd/2
-	//	2. cwnd = ssthresh
-	//	3. do fast retransmission (need to determine which packets to retransmit)
 
 }
 
@@ -275,61 +273,63 @@ void rel_read(rel_t *relState) {
 	} else //run in the sender mode
 	{
 		//same logic as lab 1
-//		for (;;) {
-//				if (is_sending_window_full(relState) || relState->read_EOF_from_input) {
-//					if (debug) {
-//						printf(
-//								"window size is full or have already read EOF before from input\n");
-//					}
-//					return;
-//				}
-//
-//				packet_t *packet = (packet_t*) malloc(sizeof(packet_t));
-//				int bytesRead = conn_input(relState->c, packet->data, SIZE_MAX_PAYLOAD);
-//
-//				relState->read_EOF_from_input = 0;
-//				if (bytesRead == 0) { /* no data is read from conn_input */
-//					free(packet);
-//					if (debug) {
-//						printf("no data is available at input now\n");
-//					}
-//					return;
-//				}
-//
-//				if (bytesRead == -1) { /* read EOF from conn_input */
-//
-//					if (debug)
-//						printf("read EOF from input\n");
-//					relState->read_EOF_from_input = 1;
-//					packet->len = (uint16_t) SIZE_EOF_PACKET;
-//
-//				} else { /* read some data from conn_input */
-//					packet->len = (uint16_t) (SIZE_DATA_PCK_HEADER + bytesRead);
-//				}
-//		//		printf("hey: %d\n", relState->receiving_window->seqno_last_packet_outputted);
-//				packet->ackno = relState->receiving_window->seqno_last_packet_outputted
-//						+ 1;
-//				packet->seqno =
-//						(uint32_t) (relState->sending_window->seqno_last_packet_sent + 1);
-////				packet->rwnd =
-//
-//				/* initialize packet node */
-//				struct packet_node* node = (struct packet_node*) malloc(
-//						sizeof(struct packet_node));
-//		//		node->packet = packet;
-//				packet_t * pack = (packet_t *) malloc(sizeof(packet_t));
-//				memcpy(pack, packet, sizeof(packet_t));
-//				node->packet = pack;
-//
-//				/* send the packet */
-//				append_node_to_last_sent(relState, node);
-//				struct timeval* current_time = get_current_time();
-//				send_data_pck(relState, node, current_time);
-//
-//				if (try_end_connection(relState)) {
-//					return;
-//				}
-//			}
+		for (;;) {
+				if (is_sending_window_full(relState) || is_congestion_window_full(relState) || relState->read_EOF_from_input) {
+					if (debug) {
+						printf(
+								"window size is full or have already read EOF before from input\n");
+					}
+					return;
+				}
+
+				packet_t *packet = (packet_t*) malloc(sizeof(packet_t));
+				int bytesRead = conn_input(relState->c, packet->data, SIZE_MAX_PAYLOAD);
+
+				relState->read_EOF_from_input = 0;
+				if (bytesRead == 0) { /* no data is read from conn_input */
+					free(packet);
+					if (debug) {
+						printf("no data is available at input now\n");
+					}
+					return;
+				}
+
+				if (bytesRead == -1) { /* read EOF from conn_input */
+					if (debug)
+						printf("read EOF from input\n");
+					relState->read_EOF_from_input = 1;
+					packet->len = (uint16_t) SIZE_EOF_PACKET;
+
+				} else { /* read some data from conn_input */
+					//check if window size exceeded
+					if (get_window_buffer_size(relState))
+					packet->len = (uint16_t) (SIZE_DATA_PCK_HEADER + bytesRead);
+				}
+
+		//		printf("hey: %d\n", relState->receiving_window->seqno_last_packet_outputted);
+				packet->ackno = relState->receiving_window->seqno_last_packet_outputted
+						+ 1;
+				packet->seqno =
+						(uint32_t) (relState->sending_window->seqno_last_packet_sent + 1);
+				packet->rwnd = get_window_buffer_size(relState); //TODO: current window size?
+
+				/* initialize packet node */
+				struct packet_node* node = (struct packet_node*) malloc(
+						sizeof(struct packet_node));
+		//		node->packet = packet;
+				packet_t * pack = (packet_t *) malloc(sizeof(packet_t));
+				memcpy(pack, packet, sizeof(packet_t));
+				node->packet = pack;
+
+				/* send the packet */
+				append_node_to_last_sent(relState, node);
+				struct timeval* current_time = get_current_time();
+				send_data_pck(relState, node, current_time);
+
+				if (try_end_connection(relState)) {
+					return;
+				}
+			}
 	}
 }
 
@@ -443,13 +443,18 @@ void print_pointers_in_receive_window(struct sliding_window_receive * window,
 ////////////////////////////////////////////////////////////////////////
 ////////////////////////// Helper functions /////////////////////////////
 ////////////////////////////////////////////////////////////////////////
-int get_window_buffer_size(rel_t * relState) {
-//	if (relState->c->sender_receiver == 1){ //sender = 1
-//		return (1 + relState->sending_window->seqno_last_packet_sent
-//				- relState->sending_window->seqno_last_packet_acked);
-//	}else if(relState->c->sender_receiver == 2){
-//		return (1 + relState->receiving_window->
-//	}
+
+
+// TODO: test see if need plus 1
+uint32_t get_window_buffer_size(rel_t * relState) {
+	if (relState->c->sender_receiver == 1){ //sender = 1
+		return (relState->sending_window->seqno_last_packet_sent
+				- relState->sending_window->seqno_last_packet_acked);
+	}else{
+		return (relState->receiving_window->seqno_next_packet_expected
+				- relState->receiving_window->seqno_last_packet_outputted);
+	}
+
 }
 
 /**
@@ -495,7 +500,8 @@ void process_received_ack_pkt(rel_t *r, packet_t *pkt) {
 	/* update last packet acked pointer in sending window if new ack arrives */
 	if (is_new_ACK(pkt->ackno, r)) {
 		r->sending_window->seqno_last_packet_acked = pkt->ackno - 1;
-		if (!is_sending_window_full(r)) {
+		r->sending_window->receiver_window_size = pkt->rwnd; // TODO: update receiver window size from ACK packet
+		if (!is_sending_window_full(r) && !is_congestion_window_full(r)) {
 			rel_read(r);
 		}
 	}
@@ -605,6 +611,8 @@ struct sliding_window_send * init_sending_window() {
 	window->seqno_last_packet_acked = 0;
 	window->seqno_last_packet_sent = 0;
 	window->last_packet_sent = NULL;
+	window->pkt_to_retransmit = NULL;
+	window->receiver_window_size = INT_MAX;
 	return window;
 }
 
@@ -775,9 +783,15 @@ int try_end_connection(rel_t* r) {
 	return 0;
 }
 
+// TODO: updated helper method to compare the min with config.window
 int is_sending_window_full(rel_t* r) {
 	return r->sending_window->seqno_last_packet_sent
 			- r->sending_window->seqno_last_packet_acked >= r->config.window;
+}
+
+int is_congestion_window_full(rel_t* r){
+	return r->sending_window->seqno_last_packet_sent
+			- r->sending_window->seqno_last_packet_acked >= (uint32_t) r->congestion_window;
 }
 
 int is_EOF_pkt(packet_t* pkt) {
