@@ -117,6 +117,7 @@ uint32_t get_current_buffer_size(rel_t *);
 int is_congestion_window_full(rel_t*);
 int is_retransmitting(rel_t*);
 void send_initial_eof(rel_t*);
+int is_duplicate_ACK(rel_t*, packet_t*);
 
 rel_t *rel_list;
 
@@ -205,32 +206,29 @@ void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
 
 	if (is_ACK_pkt(pkt)) { /* ack packet */
 //		assert(r->c->sender_receiver == SENDER);
-		/* udpate corresponding fields of rel_t */
-		if (r->sending_window->seqno_last_packet_acked == pkt->ackno) { // duplicated ack
+
+		if (is_duplicate_ACK(r, pkt)) { // duplicated ack
 			r->num_duplicated_ack_received++;
-		} else if (r->sending_window->seqno_last_packet_acked < pkt->ackno){ // new ack packet
+		} else if (is_new_ACK(pkt->ackno, r)) { // new ack packet
 			r->num_duplicated_ack_received = 1;
-			r->sending_window->seqno_last_packet_acked = pkt->ackno;
+			r->sending_window->seqno_last_packet_acked = pkt->ackno - 1;
+		} else { // old ack
+			return;
 		}
 
-
-		// If it is a triply duplicated acks,
-		//	1. ssthresh = cwnd/2
-		//	2. cwnd = ssthresh
-		//	3. do fast retransmission (need to determine which packets to retransmit)
-		/* Check if it's (triply) duplicated acks */
 		if (r->num_duplicated_ack_received >= 3) { /* triply duplicated ack */
 			r->ssthresh = (int) r->congestion_window / 2;
 			r->congestion_window = r->ssthresh;
 			/* set fast retransmission pointers */
-			r->sending_window->pkt_to_retransmit_start = get_first_unacked_pck(r);
+			r->sending_window->pkt_to_retransmit_start = get_first_unacked_pck(
+					r);
 			assert(r->sending_window->pkt_to_retransmit_start != NULL);
-			assert(get_first_unacked_pck(r)->packet->seqno == r->sending_window->seqno_last_packet_acked + 1);
-			r->sending_window->pkt_to_retransmit_end = r->sending_window->last_packet_sent;
-		} else {
-			// If receive normal ack,
-			//	1. increment cwnd (cwnd = cwnd + 1/cwnd)
-			//	2. call conn_output etc.; probably similar to part a
+			assert(
+					get_first_unacked_pck(r)->packet->seqno
+							== r->sending_window->seqno_last_packet_acked + 1);
+			r->sending_window->pkt_to_retransmit_end =
+					r->sending_window->last_packet_sent;
+		} else { /* normal ack */
 			if (r->congestion_window < r->ssthresh) { /* slow start */
 				r->congestion_window++;
 			} else {
@@ -242,14 +240,13 @@ void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
 	} else { /* data (including eof) packet */
 		process_received_ack_pkt(r, pkt);
 		process_received_data_pkt(r, pkt);
-
 	}
-
 }
 
-// called by receiver
+/**
+ * called by receiver
+ */
 void send_initial_eof(rel_t* relState) {
-
 	/* initialize packet node */
 	struct packet_node* node = (struct packet_node*) malloc(
 			sizeof(struct packet_node));
@@ -523,6 +520,10 @@ uint32_t get_current_buffer_size(rel_t * relState) {
 
 int is_retransmitting(rel_t* r) {
 	return r->sending_window->pkt_to_retransmit_start != NULL;
+}
+
+int is_duplicate_ACK(rel_t* r, packet_t* pkt) {
+	return r->sending_window->seqno_last_packet_acked + 1 == pkt->ackno;
 }
 
 /**
