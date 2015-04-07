@@ -252,6 +252,7 @@ void rel_read(rel_t *relState) {
 		packet_t * pack = (packet_t *) malloc(sizeof(packet_t));
 		memcpy(pack, packet, sizeof(packet_t));
 		node->packet = pack;
+
 		/* send the packet */
 		append_node_to_last_sent(relState, node);
 		struct timeval* current_time = get_current_time();
