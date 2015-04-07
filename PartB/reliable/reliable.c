@@ -112,7 +112,7 @@ int send_retransmit_pkts(rel_t*);
 int is_window_available_to_send_one(rel_t*);
 int min(int, int);
 void send_eof_pck(rel_t*, struct packet_node*, struct timeval*);
-uint32_t get_window_buffer_size(rel_t *);
+uint32_t get_current_buffer_size(rel_t *);
 int is_congestion_window_full(rel_t*);
 int is_retransmitting(rel_t*);
 
@@ -305,7 +305,7 @@ void rel_read(rel_t *relState) {
 
 			} else { /* read some data from conn_input */
 				//check if window size exceeded
-				if (get_window_buffer_size(relState))
+				if (get_current_buffer_size(relState))
 					packet->len = (uint16_t) (SIZE_DATA_PCK_HEADER + bytesRead);
 			}
 
@@ -314,7 +314,7 @@ void rel_read(rel_t *relState) {
 			packet->seqno =
 					(uint32_t) (relState->sending_window->seqno_last_packet_sent
 							+ 1);
-			packet->rwnd = get_window_buffer_size(relState); //TODO: current window size?
+			packet->rwnd = get_current_buffer_size(relState); //TODO: current window size?
 
 			/* initialize packet node */
 			struct packet_node* node = (struct packet_node*) malloc(
@@ -502,15 +502,14 @@ void print_pointers_in_receive_window(struct sliding_window_receive * window,
 ////////////////////////////////////////////////////////////////////////
 
 // TODO: test see if need plus 1
-uint32_t get_window_buffer_size(rel_t * relState) {
+uint32_t get_current_buffer_size(rel_t * relState) {
 	if (relState->c->sender_receiver == 1) { //sender = 1
 		return (relState->sending_window->seqno_last_packet_sent
 				- relState->sending_window->seqno_last_packet_acked);
 	} else {
 		return (relState->receiving_window->seqno_next_packet_expected
-				- relState->receiving_window->seqno_last_packet_outputted);
+				- relState->receiving_window->seqno_last_packet_outputted - 1);
 	}
-
 }
 
 int is_retransmitting(rel_t* r) {
