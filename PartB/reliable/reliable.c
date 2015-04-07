@@ -183,15 +183,6 @@ void rel_demux(const struct config_common *cc,
 	//leave it blank here!!!
 }
 
-// TODO: If receive normal ack, first check if it is a triply duplicated ack. If not,
-//	1. increment cwnd (cwnd = cwnd + 1/cwnd)
-// 	2. set last ack no. and set duplicated_ack_counter to be 1
-//	3. call conn_output etc.; probably similar to part a
-// If it is a triply duplicated acks,
-//	1. ssthresh = cwnd/2
-//	2. cwnd = ssthresh
-//	3. do fast retransmission (need to determine which packets to retransmit)
-
 void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
 	if (debug) printf("In rel_recvpkt\n");
 	/* Check if packet is corrupted */
@@ -217,12 +208,19 @@ void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
 			r->num_duplicated_ack_received = 1;
 		}
 
+		// If it is a triply duplicated acks,
+		//	1. ssthresh = cwnd/2
+		//	2. cwnd = ssthresh
+		//	3. do fast retransmission (need to determine which packets to retransmit)
 		if (r->num_duplicated_ack_received >= 3) {
 			r->ssthresh = (int) r->congestion_window / 2;
 			r->congestion_window = r->ssthresh;
 			// TODO: fast retransmission
 
 		} else {
+			// If receive normal ack,
+			//	1. increment cwnd (cwnd = cwnd + 1/cwnd)
+			//	2. call conn_output etc.; probably similar to part a
 			r->congestion_window += 1 / (r->congestion_window);
 			process_received_ack_pkt(r, pkt);
 		}
@@ -231,10 +229,6 @@ void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
 		process_received_ack_pkt(r, pkt);
 		process_received_data_pkt(r, pkt);
 	}
-//	if (pkt->len != SIZE_ACK_PACKET) { /* data packet */
-//		process_received_data_pkt(r, pkt);
-//	}
-//	process_received_ack_pkt(r, pkt); /* process both data and ack packet as Acks */
 
 
 }
@@ -306,7 +300,6 @@ void rel_read(rel_t *relState) {
 					packet->len = (uint16_t) (SIZE_DATA_PCK_HEADER + bytesRead);
 				}
 
-		//		printf("hey: %d\n", relState->receiving_window->seqno_last_packet_outputted);
 				packet->ackno = relState->receiving_window->seqno_last_packet_outputted
 						+ 1;
 				packet->seqno =
