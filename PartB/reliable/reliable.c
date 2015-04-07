@@ -37,7 +37,8 @@ struct sliding_window_send {
 	uint32_t seqno_last_packet_sent; /* sequence number of the last sent packet */
 
 	uint32_t receiver_window_size; /* the window size at receiver (obtained from a ack packet) */
-	struct packet_node* pkt_to_retransmit; /* a pointer to the packet for retransmitting in the linked list */
+	struct packet_node* pkt_to_retransmit_start; /* a pointer to the packet for retransmitting in the linked list */
+	struct packet_node* pkt_to_retransmit_end;
 };
 
 /**
@@ -113,6 +114,7 @@ int min(int, int);
 void send_eof_pck(rel_t*, struct packet_node*, struct timeval*);
 uint32_t get_window_buffer_size(rel_t *);
 int is_congestion_window_full(rel_t*);
+int is_retransmitting(rel_t*);
 
 rel_t *rel_list;
 
@@ -389,7 +391,6 @@ void rel_output(rel_t *r) {
 /**
  * Retransmit any packets that have not been acked and exceed timeout in sender
  * If so, perform slow start and retransmit the packets
- * Divide sshreshold by 2 and set congestion window to be 1
  * @author Justin (Zihao) Zhang
  */
 void rel_timer() {
@@ -414,13 +415,15 @@ void rel_timer() {
 						printf("Found timeout packet and start to retransmit:");
 						print_pkt(node->packet, "packet", node->packet->len);
 					}
-					cur_rel->sending_window->pkt_to_retransmit = node;
+					cur_rel->sending_window->pkt_to_retransmit_start = node;
+					cur_rel->sending_window->pkt_to_retransmit_end =
+							cur_rel->sending_window->last_packet_sent;
 					break;
 				}
 				node = node->next;
 			}
 
-			if (cur_rel->sending_window->pkt_to_retransmit) {
+			if (is_retransmitting(cur_rel)) {
 				prepare_slow_start(cur_rel);
 				struct packet_node* eof = get_receiver_EOF_node(cur_rel);
 				send_data_pck(cur_rel, eof, get_current_time()); /* retransmit EOF first */
@@ -506,23 +509,37 @@ uint32_t get_window_buffer_size(rel_t * relState) {
 
 }
 
+int is_retransmitting(rel_t* r) {
+	return r->sending_window->pkt_to_retransmit_start != NULL;
+}
+
 /**
  * send unfinished retransmit packets
- * @return 1 if finishing sending all, 0 if not
+ * @return 1 if finished re-sending all, 0 if not
  */
 int send_retransmit_pkts(rel_t* r) {
-	while (r->sending_window->pkt_to_retransmit) {
+	while (is_retransmitting(r)) {
 		if (is_window_available_to_send_one(r)) {
-			send_data_pck(r, r->sending_window->pkt_to_retransmit,
+
+			send_data_pck(r, r->sending_window->pkt_to_retransmit_start,
 					get_current_time());
-			r->sending_window->pkt_to_retransmit =
-					r->sending_window->pkt_to_retransmit->next;
 			r->num_packets_sent_in_session += 1;
+
+			/* check if retransmission is finished*/
+			if (r->sending_window->pkt_to_retransmit_start
+					== r->sending_window->pkt_to_retransmit_end) {
+				r->sending_window->pkt_to_retransmit_start = NULL;
+				r->sending_window->pkt_to_retransmit_end = NULL;
+				break;
+			}
+
+			r->sending_window->pkt_to_retransmit_start =
+					r->sending_window->pkt_to_retransmit_start->next;
 		} else {
 			break;
 		}
 	}
-	return r->sending_window->pkt_to_retransmit == NULL;
+	return !is_retransmitting(r);
 }
 
 int min(int a, int b) {
@@ -660,7 +677,7 @@ struct sliding_window_send * init_sending_window() {
 	window->seqno_last_packet_acked = 0;
 	window->seqno_last_packet_sent = 0;
 	window->last_packet_sent = NULL;
-	window->pkt_to_retransmit = NULL;
+	window->pkt_to_retransmit_start = NULL;
 	window->receiver_window_size = INT_MAX;
 	return window;
 }
