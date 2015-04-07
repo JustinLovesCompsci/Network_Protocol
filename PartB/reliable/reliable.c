@@ -102,6 +102,7 @@ void append_node_to_last_received(rel_t*, struct packet_node*);
 int is_sending_window_full(rel_t*);
 void process_received_ack_pkt(rel_t*, packet_t*);
 int is_EOF_pkt(packet_t*);
+int is_ACK_pkt(packet_t*);
 int is_new_ACK(uint32_t, rel_t*);
 int check_all_sent_pkts_acked(rel_t*);
 struct timeval* get_current_time();
@@ -202,7 +203,7 @@ void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
 		print_pkt(pkt, "packet", (int) pkt->len);
 	}
 
-	if (is_EOF_pkt(pkt)) { /* ack packet */
+	if (is_ACK_pkt(pkt)) { /* ack packet */
 		assert(r->c->sender_receiver == SENDER);
 		/* Check if it's (triply) duplicated acks */
 		if (r->sending_window->seqno_last_packet_acked >= pkt->ackno) {
@@ -231,6 +232,7 @@ void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
 	} else { /* data (including eof) packet */
 		process_received_ack_pkt(r, pkt);
 		process_received_data_pkt(r, pkt);
+
 	}
 
 }
@@ -871,7 +873,7 @@ int is_congestion_window_full(rel_t* r) {
 
 int is_EOF_pkt(packet_t* pkt) {
 //	return pkt->len == SIZE_EOF_PACKETs && strlen(pkt->data) == 0;
-	printf("%s\n", pkt->data);
+//	printf("%s\n", pkt->data);
 	return pkt->len == SIZE_EOF_PACKET;
 }
 
@@ -887,4 +889,11 @@ int check_all_sent_pkts_acked(rel_t* r) {
 
 struct packet_node* get_receiver_EOF_node(rel_t* r) {
 	return r->sending_window->last_packet_sent;
+}
+
+/*
+ * Check if a given packet is an ACK packet
+ */
+int is_ACK_pkt(packet_t * pkt) {
+	return pkt->len == SIZE_EOF_PACKET;
 }
