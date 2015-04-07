@@ -252,6 +252,7 @@ void rel_read(rel_t *relState) {
 		packet_t * pack = (packet_t *) malloc(sizeof(packet_t));
 		memcpy(pack, packet, sizeof(packet_t));
 		node->packet = pack;
+
 		/* send the packet */
 		append_node_to_last_sent(relState, node);
 		struct timeval* current_time = get_current_time();
@@ -699,7 +700,8 @@ int is_sending_window_full(rel_t* r) {
 // TODO: find other way to tell EOF besides SIZE_EOF_PACKET
 int is_EOF_pkt(packet_t* pkt) {
 //	return pkt->len == SIZE_EOF_PACKETs && strlen(pkt->data) == 0;
-	if (debug) printf("%s\n", pkt->data);
+	if (debug)
+		printf("%s\n", pkt->data);
 	return pkt->len == SIZE_EOF_PACKET;
 }
 
