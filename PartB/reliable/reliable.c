@@ -288,16 +288,21 @@ void rel_read(rel_t *relState) {
 			send_initial_eof(relState);
 		}
 	} else /* sender mode */
-	{	printf("in sender mode in rel_read\n");
+	{
+		printf("in sender mode in rel_read\n");
 		for (;;) {
 			if (is_sending_window_full(relState)
 					|| is_congestion_window_full(relState)
 					|| is_retransmitting(relState)
 					|| relState->read_EOF_from_input) {
 //				if (debug) {
-					printf("Abort generating packet-> is retransmitting: %d, sending window full: %d, congestion window full: %d, "
-							"read EOF before from input: %d\n", is_retransmitting(relState), is_sending_window_full(relState),
-							is_congestion_window_full(relState), relState->read_EOF_from_input);
+				printf(
+						"Abort generating packet-> is retransmitting: %d, sending window full: %d, congestion window full: %d, "
+								"read EOF before from input: %d\n",
+						is_retransmitting(relState),
+						is_sending_window_full(relState),
+						is_congestion_window_full(relState),
+						relState->read_EOF_from_input);
 //				}
 
 				return;
@@ -311,14 +316,14 @@ void rel_read(rel_t *relState) {
 			if (bytesRead == 0) { /* no data is read from conn_input */
 				free(packet);
 //				if (debug) {
-					printf("no data is available at input now\n");
+				printf("no data is available at input now\n");
 //				}
 				return;
 			}
 
 			if (bytesRead == -1) { /* read EOF from conn_input */
 //				if (debug)
-					printf("read EOF from input\n");
+				printf("read EOF from input\n");
 				relState->read_EOF_from_input = 1;
 				packet->len = (uint16_t) SIZE_EOF_PACKET;
 
@@ -553,7 +558,8 @@ int is_duplicate_ACK(rel_t* r, packet_t* pkt) {
 int send_retransmit_pkts(rel_t* r) {
 	while (is_retransmitting(r)) {
 		printf("Start/continue retransmitting packets\n");
-		printf("window available to retransmit: %d\n", is_window_available_to_send_one(r));
+		printf("window available to retransmit: %d\n",
+				is_window_available_to_send_one(r));
 		if (is_window_available_to_send_one(r)) {
 
 			send_data_pck(r, r->sending_window->pkt_to_retransmit_start,
@@ -912,14 +918,16 @@ int try_end_connection(rel_t* r) {
  * Check if the sending window is full
  */
 int is_sending_window_full(rel_t* r) {
-	printf("last packet sent: %d, last packet acked: %d, config window size: %d, receiver window size: %d\n",
+	printf(
+			"last packet sent: %d, last packet acked: %d, config window size: %d, receiver window size: %d\n",
 			r->sending_window->seqno_last_packet_sent,
-			r->sending_window->seqno_last_packet_acked,
-			r->config.window,
+			r->sending_window->seqno_last_packet_acked, r->config.window,
 			r->sending_window->receiver_window_size);
-	printf("is sending window full: %d\n", r->sending_window->seqno_last_packet_sent
-			- r->sending_window->seqno_last_packet_acked
-			>= min(r->config.window, r->sending_window->receiver_window_size));
+	printf("is sending window full: %d\n",
+			r->sending_window->seqno_last_packet_sent
+					- r->sending_window->seqno_last_packet_acked
+					>= min(r->config.window,
+							r->sending_window->receiver_window_size));
 	return r->sending_window->seqno_last_packet_sent
 			- r->sending_window->seqno_last_packet_acked
 			>= min(r->config.window, r->sending_window->receiver_window_size);
@@ -929,13 +937,14 @@ int is_sending_window_full(rel_t* r) {
  * Check if the congestion window is full
  */
 int is_congestion_window_full(rel_t* r) {
-	printf("last packet sent: %d, last packet acked: %d, congestion window size: %d\n",
+	printf(
+			"last packet sent: %d, last packet acked: %d, congestion window size: %f\n",
 			r->sending_window->seqno_last_packet_sent,
-			r->sending_window->seqno_last_packet_acked,
-			r->congestion_window);
-	printf("is congestion window full: %d\n", r->sending_window->seqno_last_packet_sent
-			- r->sending_window->seqno_last_packet_acked
-			>= r->congestion_window);
+			r->sending_window->seqno_last_packet_acked, r->congestion_window);
+	printf("is congestion window full: %d\n",
+			r->sending_window->seqno_last_packet_sent
+					- r->sending_window->seqno_last_packet_acked
+					>= r->congestion_window);
 	return r->num_packets_sent_in_session >= r->congestion_window;
 }
 
