@@ -227,11 +227,13 @@ void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
 				r->num_packets_sent_in_session -= get_num_retransmit_pkts(r);
 
 			} else { /* duplicated ACK but not triple duplication yet */
+				r->num_packets_sent_in_session = 0;
 				increase_congestion_window_by_mode(r);
 			}
 
 		} else if (is_new_ACK(pkt->ackno, r)) { /* new ACK packet */
 			r->num_duplicated_ack_received = 1;
+			r->num_packets_sent_in_session = 0;
 			increase_congestion_window_by_mode(r);
 			process_received_ack_pkt(r, pkt);
 		}
@@ -414,38 +416,36 @@ void rel_timer() {
 	rel_t* cur_rel = rel_list;
 
 	while (cur_rel) {
-		if (send_retransmit_pkts(cur_rel)) {
-			struct packet_node* node = get_first_unacked_pck(cur_rel);
+		struct packet_node* node = get_first_unacked_pck(cur_rel);
 
-			while (node) {
-				struct timeval* current_time = get_current_time();
-				struct timeval* diff = (struct timeval*) malloc(
-						sizeof(struct timeval));
-				timersub(current_time, node->time_sent, diff);
-				//printf("diff is %d:%d\n", diff->tv_sec, diff->tv_usec);
+		while (node) {
+			struct timeval* current_time = get_current_time();
+			struct timeval* diff = (struct timeval*) malloc(
+					sizeof(struct timeval));
+			timersub(current_time, node->time_sent, diff);
+			//printf("diff is %d:%d\n", diff->tv_sec, diff->tv_usec);
 
-				if (is_greater_than(diff, cur_rel->config.timeout)) { /* Retransmit because exceeds timeout */
-					free(current_time);
-					free(diff);
+			if (is_greater_than(diff, cur_rel->config.timeout)) { /* Retransmit because exceeds timeout */
+				free(current_time);
+				free(diff);
 
-					if (debug) {
-						printf("Found timeout packet and start to retransmit:");
-						print_pkt(node->packet, "packet", node->packet->len);
-					}
-					cur_rel->sending_window->pkt_to_retransmit_start = node;
-					cur_rel->sending_window->pkt_to_retransmit_end =
-							cur_rel->sending_window->last_packet_sent;
-					cur_rel->num_packets_sent_in_session -=
-							get_num_retransmit_pkts(cur_rel);
-					break;
+				if (debug) {
+					printf("Found timeout packet and start to retransmit:");
+					print_pkt(node->packet, "packet", node->packet->len);
 				}
-				node = node->next;
-			}
-
-			if (is_retransmitting(cur_rel)) {
+				cur_rel->sending_window->pkt_to_retransmit_start = node;
+				cur_rel->sending_window->pkt_to_retransmit_end =
+						cur_rel->sending_window->last_packet_sent;
+				cur_rel->num_packets_sent_in_session -= get_num_retransmit_pkts(
+						cur_rel);
+				assert(is_retransmitting(cur_rel));
 				prepare_slow_start(cur_rel);
+				break;
 			}
+			node = node->next;
 		}
+
+		send_retransmit_pkts(cur_rel);
 		cur_rel = rel_list->next;
 	}
 }
