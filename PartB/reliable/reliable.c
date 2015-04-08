@@ -21,7 +21,7 @@ int debug = 0;
 #define SIZE_ACK_PACKET 12
 #define SIZE_EOF_PACKET 16
 #define SIZE_DATA_PCK_HEADER 16
-#define SIZE_MAX_PAYLOAD 500
+#define SIZE_MAX_PAYLOAD 1000
 #define INIT_SEQ_NUM 1
 
 struct packet_node {
@@ -56,13 +56,11 @@ struct reliable_state {
 	conn_t *c; /* This is the connection object */
 
 	/* Add your own data fields below this */
-	int ssthresh; // ssh threshold
-	float congestion_window; // different from receiver_window_size; find the min of two
+	int ssthresh;
+	float congestion_window;
 	int num_duplicated_ack_received;
 	int num_packets_sent_in_session; /* number of packets that have been sent in the current session (RTT) */
-
-	/* For receiver */
-	int has_sent_EOF_packet;
+	int has_sent_EOF_packet; /* For receiver */
 
 	/* below same as 3a */
 	struct config_common config;
@@ -443,10 +441,8 @@ void rel_timer() {
 	rel_t* cur_rel = rel_list;
 
 	while (cur_rel) {
-		// receiver send initial eof
-
 		if (cur_rel->has_sent_EOF_packet
-				== 0&& cur_rel->c->sender_receiver == RECEIVER) {
+				== 0&& cur_rel->c->sender_receiver == RECEIVER) { /* receiver send initial EOF */
 			send_initial_eof(cur_rel);
 			return;
 		}
