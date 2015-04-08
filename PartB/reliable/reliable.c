@@ -295,10 +295,7 @@ void rel_read(rel_t *relState) {
 					|| is_retransmitting(relState)
 					|| relState->read_EOF_from_input) {
 //				if (debug) {
-					printf(
-							"Abort generating packet: is retransmitting, or sending window full, "
-									"or congestion window full or have already read EOF before from input\n");
-					printf("is retransmitting: %d, sending window full: %d, congestion window full: %d, "
+					printf("Abort generating packet-> is retransmitting: %d, sending window full: %d, congestion window full: %d, "
 							"read EOF before from input: %d\n", is_retransmitting(relState), is_sending_window_full(relState),
 							is_congestion_window_full(relState), relState->read_EOF_from_input);
 //				}
@@ -939,9 +936,7 @@ int is_congestion_window_full(rel_t* r) {
 	printf("is congestion window full: %d\n", r->sending_window->seqno_last_packet_sent
 			- r->sending_window->seqno_last_packet_acked
 			>= r->congestion_window);
-	return r->sending_window->seqno_last_packet_sent
-			- r->sending_window->seqno_last_packet_acked
-			>= r->congestion_window;
+	return r->num_packets_sent_in_session >= r->congestion_window;
 }
 
 int is_EOF_pkt(packet_t* pkt) {
