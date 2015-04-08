@@ -421,7 +421,6 @@ void rel_output(rel_t *r) {
 void rel_timer() {
 //	printf("In rel_timer\n");
 	rel_t* cur_rel = rel_list;
-	return;
 
 	while (cur_rel) {
 		struct packet_node* node = get_first_unacked_pck(cur_rel);
@@ -602,6 +601,7 @@ void prepare_slow_start(rel_t* r) {
 void prepare_congestion_avoidance(rel_t* r) {
 	r->ssthresh = (int) r->congestion_window / 2;
 	r->congestion_window = r->ssthresh;
+	printf("Preparing congestion avoidance: congestion window = ssthresh = %f ", r->congestion_window);
 	r->num_packets_sent_in_session = 0;
 }
 
