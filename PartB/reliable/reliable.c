@@ -370,9 +370,9 @@ void rel_read(rel_t *relState) {
 			struct timeval* current_time = get_current_time();
 			send_data_pck(relState, node, current_time);
 
-			if (try_end_connection(relState)) {
-				return;
-			}
+//			if (try_end_connection(relState)) {
+//				return;
+//			}
 		}
 	}
 }
