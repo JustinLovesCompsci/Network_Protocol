@@ -23,6 +23,7 @@ int debug = 0;
 #define SIZE_DATA_PCK_HEADER 16
 #define SIZE_MAX_PAYLOAD 1000
 #define INIT_SEQ_NUM 1
+#define INIT_CONGESTION_WINDOW 3
 
 struct packet_node {
 	struct packet_node *next;
@@ -154,7 +155,7 @@ rel_create(conn_t *c, const struct sockaddr_storage *ss,
 
 	/* Do any other initialization you need here */
 	r->ssthresh = INT_MAX;
-	r->congestion_window = 1;
+	r->congestion_window = INIT_CONGESTION_WINDOW;
 	r->num_duplicated_ack_received = 0;
 	r->num_packets_sent_in_session = 0;
 
@@ -171,7 +172,7 @@ rel_create(conn_t *c, const struct sockaddr_storage *ss,
 	r->all_pkts_acked = 0;
 //	if (debug)  printf("config window size: %d\n", r->config.window);
 //	if (debug)  printf("timeout value: %d\n", r->config.timeout);
-	r->config.timeout = 400;
+	r->config.timeout = 100;
 	start_time = get_current_time();
 	return r;
 }
@@ -626,7 +627,7 @@ void prepare_slow_start(rel_t* r) {
 	if (r->ssthresh <= 0) {
 		r->ssthresh = 1;
 	}
-	r->congestion_window = 1;
+	r->congestion_window = INIT_CONGESTION_WINDOW;
 	r->num_packets_sent_in_session = 0;
 }
 
@@ -986,9 +987,12 @@ int is_sending_window_full(rel_t* r) {
 //			r->sending_window->seqno_last_packet_sent,
 //			r->sending_window->seqno_last_packet_acked, r->config.window,
 //			r->sending_window->receiver_window_size);
+//	return r->sending_window->seqno_last_packet_sent
+//			- r->sending_window->seqno_last_packet_acked
+//			>= min(r->config.window, r->sending_window->receiver_window_size);
 	return r->sending_window->seqno_last_packet_sent
-			- r->sending_window->seqno_last_packet_acked
-			>= min(r->config.window, r->sending_window->receiver_window_size);
+				- r->sending_window->seqno_last_packet_acked
+				>= r->sending_window->receiver_window_size;
 }
 
 /*
