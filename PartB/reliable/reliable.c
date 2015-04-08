@@ -127,6 +127,7 @@ rel_t *rel_list;
 struct timeval* start_time;
 struct timeval* end_time;
 int num_pkts_sent = 0;
+int original_pkts_sent = 0;
 
 /* Creates a new reliable protocol session, returns NULL on failure.
  * Exactly one of c and ss should be NULL.  (ss is NULL when called
@@ -170,9 +171,7 @@ rel_create(conn_t *c, const struct sockaddr_storage *ss,
 	r->read_EOF_from_sender = 0;
 	r->output_all_data = 0;
 	r->all_pkts_acked = 0;
-//	if (debug)  printf("config window size: %d\n", r->config.window);
-//	if (debug)  printf("timeout value: %d\n", r->config.timeout);
-	r->config.timeout = 200;
+	if (r->config.timeout == 0) r->config.timeout = 400;
 	start_time = get_current_time();
 	return r;
 }
@@ -194,8 +193,8 @@ void rel_destroy(rel_t *r) {
 	free(r);
 	end_time = get_current_time();
 	int diff = get_millisec(end_time) - get_millisec(start_time);
-	printf("Transferring the file takes %d milliseconds and %d packets sent\n",
-			diff, num_pkts_sent);
+	printf("Transferring the file takes %d milliseconds and %d packets sent, %d original packets sent\n",
+			diff, num_pkts_sent, original_pkts_sent);
 	free(start_time);
 	free(end_time);
 }
@@ -371,6 +370,7 @@ void rel_read(rel_t *relState) {
 			append_node_to_last_sent(relState, node);
 			struct timeval* current_time = get_current_time();
 			send_data_pck(relState, node, current_time);
+			original_pkts_sent++;
 
 //			if (try_end_connection(relState)) {
 //				return;
@@ -987,12 +987,12 @@ int is_sending_window_full(rel_t* r) {
 //			r->sending_window->seqno_last_packet_sent,
 //			r->sending_window->seqno_last_packet_acked, r->config.window,
 //			r->sending_window->receiver_window_size);
-//	return r->sending_window->seqno_last_packet_sent
-//			- r->sending_window->seqno_last_packet_acked
-//			>= min(r->config.window, r->sending_window->receiver_window_size);
 	return r->sending_window->seqno_last_packet_sent
 			- r->sending_window->seqno_last_packet_acked
-			>= r->sending_window->receiver_window_size;
+			>= min(r->congestion_window, r->sending_window->receiver_window_size);
+//	return r->sending_window->seqno_last_packet_sent
+//			- r->sending_window->seqno_last_packet_acked
+//			>= r->sending_window->receiver_window_size;
 }
 
 /*
