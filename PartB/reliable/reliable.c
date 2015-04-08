@@ -227,7 +227,6 @@ void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
 				r->num_packets_sent_in_session -= get_num_retransmit_pkts(r);
 
 			} else { /* duplicated ACK but not triple duplication yet */
-				r->num_packets_sent_in_session = 0;
 				increase_congestion_window_by_mode(r);
 			}
 
@@ -236,8 +235,9 @@ void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
 			r->num_packets_sent_in_session = 0;
 			increase_congestion_window_by_mode(r);
 			process_received_ack_pkt(r, pkt);
+		} else {
+			printf("Received an old but not duplicated ACK\n");
 		}
-		printf("Received an old but not duplicated ACK\n");
 	} else { /* data (including EOF) packet */
 		printf("Received a Data packet\n");
 		process_received_ack_pkt(r, pkt);
@@ -297,8 +297,8 @@ void rel_read(rel_t *relState) {
 				if (debug) {
 					printf(
 							"Abort generating packet->"
-							"is retransmitting %d, sending window full %d, congestion window full %d "
-							"or have already read EOF before from input\n",
+									"is retransmitting %d, sending window full %d, congestion window full %d "
+									"or have already read EOF before from input\n",
 							is_retransmitting(relState),
 							is_sending_window_full(relState),
 							is_congestion_window_full(relState));
@@ -585,11 +585,13 @@ int is_window_available_to_send_one(rel_t *r) {
 void prepare_slow_start(rel_t* r) {
 	r->ssthresh = r->congestion_window / 2;
 	r->congestion_window = 1;
+	r->num_packets_sent_in_session = 0;
 }
 
 void prepare_congestion_avoidance(rel_t* r) {
 	r->ssthresh = (int) r->congestion_window / 2;
 	r->congestion_window = r->ssthresh;
+	r->num_packets_sent_in_session = 0;
 }
 
 void process_received_ack_pkt(rel_t *r, packet_t *pkt) {
