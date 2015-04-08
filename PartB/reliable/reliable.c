@@ -253,6 +253,12 @@ void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
 		process_received_ack_pkt(r, pkt);
 		process_received_data_pkt(r, pkt);
 	}
+
+//	if (r->c->sender_receiver == RECEIVER){
+//		if (try_end_connection(r)) {
+//			return;
+//		}
+//	}
 }
 
 /**
@@ -287,9 +293,9 @@ void send_initial_eof(rel_t* relState) {
 }
 
 void rel_read(rel_t *relState) {
-	if (debug) {
-		printf("In rel_read\n");
-	}
+//	if (debug) {
+//		printf("In rel_read\n");
+//	}
 
 	if (relState->c->sender_receiver == RECEIVER) {
 		if (relState->has_sent_EOF_packet == 1) {
@@ -313,6 +319,7 @@ void rel_read(rel_t *relState) {
 							is_congestion_window_full(relState),
 							relState->read_EOF_from_input);
 				}
+				try_end_connection(relState);
 				return;
 			}
 			packet_t *packet = (packet_t*) malloc(sizeof(packet_t));
@@ -430,6 +437,13 @@ void rel_timer() {
 	rel_t* cur_rel = rel_list;
 
 	while (cur_rel) {
+		// receiver send initial eof
+
+		if (cur_rel->has_sent_EOF_packet == 0 && cur_rel->c->sender_receiver == RECEIVER) {
+			send_initial_eof(cur_rel);
+			return;
+		}
+
 		struct packet_node* node = get_first_unacked_pck(cur_rel);
 
 		while (node) {
@@ -632,10 +646,9 @@ void process_received_ack_pkt(rel_t *r, packet_t *pkt) {
 		printf("Received a new ACK with ackno %d\n", pkt->ackno);
 		r->sending_window->seqno_last_packet_acked = pkt->ackno - 1;
 		r->sending_window->receiver_window_size = pkt->rwnd;
+		check_all_sent_pkts_acked(r);
 		rel_read(r);
 	}
-
-	check_all_sent_pkts_acked(r);
 }
 
 /* called by receiver
@@ -921,12 +934,23 @@ uint16_t get_check_sum(packet_t *packet, int packetLength) {
  * Else return 0
  */
 int try_end_connection(rel_t* r) {
-	if (r->all_pkts_acked && r->read_EOF_from_input && r->read_EOF_from_sender
-			&& r->output_all_data) {
-		rel_destroy(r);
-		return 1;
+	if(r->c->sender_receiver == SENDER){
+//		printf("--> try end connection: all pkts acked %d , readEOF_from input %d, output all data %d\n",
+//				r->all_pkts_acked, r->read_EOF_from_input, r->output_all_data);
+
+		if (r->all_pkts_acked && r->read_EOF_from_input && r->output_all_data) {
+			rel_destroy(r);
+			return 1;
+		}
+		return 0;
+	}else{ // receiver
+		if (r->read_EOF_from_sender) {
+
+			rel_destroy(r);
+			return 1;
+		}
+		return 0;
 	}
-	return 0;
 }
 
 /*
@@ -972,6 +996,8 @@ int is_new_ACK(uint32_t ackno, rel_t* r) {
 }
 
 int check_all_sent_pkts_acked(rel_t* r) {
+//	printf("seqno last acked: %u \n", r->sending_window->seqno_last_packet_acked);
+//	printf("seqno last sent: %u \n", r->sending_window->seqno_last_packet_sent);
 	r->all_pkts_acked = r->sending_window->seqno_last_packet_acked
 			== r->sending_window->seqno_last_packet_sent;
 	return r->all_pkts_acked;
