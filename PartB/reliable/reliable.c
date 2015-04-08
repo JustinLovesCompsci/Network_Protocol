@@ -127,6 +127,7 @@ int get_millisec(struct timeval*);
 rel_t *rel_list;
 struct timeval* start_time;
 struct timeval* end_time;
+int num_pkts_sent = 0;
 
 /* Creates a new reliable protocol session, returns NULL on failure.
  * Exactly one of c and ss should be NULL.  (ss is NULL when called
@@ -194,7 +195,8 @@ void rel_destroy(rel_t *r) {
 	free(r);
 	end_time = get_current_time();
 	int diff = get_millisec(end_time) - get_millisec(start_time);
-	printf("Time taken to transfer the file: %d milliseconds\n", diff);
+	printf("Transferring the file takes %d milliseconds and %d packets sent\n",
+			diff, num_pkts_sent);
 	free(start_time);
 	free(end_time);
 }
@@ -844,6 +846,7 @@ void send_ack_pck(rel_t* r, int ack_num) {
 	convert_to_network_order(ack_pck);
 	ack_pck->cksum = get_check_sum(ack_pck, SIZE_ACK_PACKET);
 	conn_sendpkt(r->c, ack_pck, SIZE_ACK_PACKET);
+	num_pkts_sent++;
 	free(ack_pck);
 	if (debug) {
 		printf("Ack packet sent\n");
@@ -864,6 +867,7 @@ void send_data_pck(rel_t*r, struct packet_node* pkt_ptr,
 	if (debug)
 		printf("sending packet with seqno: %d\n", ntohl(packet->seqno));
 	conn_sendpkt(r->c, packet, pckLen);
+	num_pkts_sent++;
 	pkt_ptr->time_sent = current_time;
 	r->num_packets_sent_in_session = r->num_packets_sent_in_session + 1;
 
