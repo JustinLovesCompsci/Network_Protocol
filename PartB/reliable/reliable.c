@@ -321,7 +321,8 @@ void rel_read(rel_t *relState) {
 							is_congestion_window_full(relState),
 							relState->read_EOF_from_input);
 				}
-				if (relState->read_EOF_from_input) try_end_connection(relState);
+				if (relState->read_EOF_from_input)
+					try_end_connection(relState);
 				return;
 			}
 			packet_t *packet = (packet_t*) malloc(sizeof(packet_t));
@@ -843,7 +844,6 @@ void send_ack_pck(rel_t* r, int ack_num) {
 	convert_to_network_order(ack_pck);
 	ack_pck->cksum = get_check_sum(ack_pck, SIZE_ACK_PACKET);
 	conn_sendpkt(r->c, ack_pck, SIZE_ACK_PACKET);
-	num_pkts_sent++;
 	free(ack_pck);
 	if (debug) {
 		printf("Ack packet sent\n");
@@ -991,8 +991,8 @@ int is_sending_window_full(rel_t* r) {
 //			- r->sending_window->seqno_last_packet_acked
 //			>= min(r->config.window, r->sending_window->receiver_window_size);
 	return r->sending_window->seqno_last_packet_sent
-				- r->sending_window->seqno_last_packet_acked
-				>= r->sending_window->receiver_window_size;
+			- r->sending_window->seqno_last_packet_acked
+			>= r->sending_window->receiver_window_size;
 }
 
 /*
