@@ -121,6 +121,7 @@ int is_duplicate_ACK(rel_t*, packet_t*);
 void prepare_congestion_avoidance(rel_t*);
 void increase_congestion_window_by_mode(rel_t*);
 int get_num_retransmit_pkts(rel_t*);
+void reset_retransmission_field(rel_t*);
 
 rel_t *rel_list;
 
@@ -222,9 +223,7 @@ void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
 				if (r->sending_window->pkt_to_retransmit_start == NULL) {
 					return; /* nothing to retransmit */
 				}
-				r->sending_window->pkt_to_retransmit_end =
-						r->sending_window->last_packet_sent;
-				r->num_packets_sent_in_session -= get_num_retransmit_pkts(r);
+				reset_retransmission_field(r);
 
 			} else { /* duplicated ACK but not triple duplication yet */
 				increase_congestion_window_by_mode(r);
@@ -438,10 +437,7 @@ void rel_timer() {
 					print_pkt(node->packet, "packet", node->packet->len);
 				}
 				cur_rel->sending_window->pkt_to_retransmit_start = node;
-				cur_rel->sending_window->pkt_to_retransmit_end =
-						cur_rel->sending_window->last_packet_sent;
-				cur_rel->num_packets_sent_in_session -= get_num_retransmit_pkts(
-						cur_rel);
+				reset_retransmission_field(cur_rel);
 				assert(is_retransmitting(cur_rel));
 				prepare_slow_start(cur_rel);
 				break;
@@ -452,6 +448,15 @@ void rel_timer() {
 		send_retransmit_pkts(cur_rel);
 		cur_rel = rel_list->next;
 	}
+}
+
+void reset_retransmission_field(rel_t* r) {
+	r->sending_window->pkt_to_retransmit_end =
+			r->sending_window->last_packet_sent;
+	r->num_packets_sent_in_session -= get_num_retransmit_pkts(r);
+	r->num_packets_sent_in_session =
+			(r->num_packets_sent_in_session < 0) ?
+					0 : r->num_packets_sent_in_session;
 }
 
 int get_num_retransmit_pkts(rel_t* r) {
