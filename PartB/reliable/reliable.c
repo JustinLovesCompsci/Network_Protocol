@@ -292,8 +292,12 @@ void rel_read(rel_t *relState) {
 					|| relState->read_EOF_from_input) {
 				if (debug) {
 					printf(
-							"Abort generating packet: is retransmitting, or sending window full, "
-									"or congestion window full or have already read EOF before from input\n");
+							"Abort generating packet->"
+							"is retransmitting %d, sending window full %d, congestion window full %d "
+							"or have already read EOF before from input\n",
+							is_retransmitting(relState),
+							is_sending_window_full(relState),
+							is_congestion_window_full(relState));
 				}
 				return;
 			}
@@ -776,6 +780,7 @@ void send_ack_pck(rel_t* r, int ack_num) {
 }
 
 /**
+ * called by sender side
  * @param packet is in host order
  */
 void send_data_pck(rel_t*r, struct packet_node* pkt_ptr,
@@ -787,6 +792,10 @@ void send_data_pck(rel_t*r, struct packet_node* pkt_ptr,
 	assert(packet->cksum != 0);
 	conn_sendpkt(r->c, packet, pckLen);
 	pkt_ptr->time_sent = current_time;
+
+	r->num_packets_sent_in_session = r->num_packets_sent_in_session + 1;
+	/*sender responsible for increment, receiver responsible for clearing*/
+
 	convert_to_host_order(packet);
 	if (debug) {
 		printf("IN send_data_pck, print host order packet:\n");
@@ -794,6 +803,7 @@ void send_data_pck(rel_t*r, struct packet_node* pkt_ptr,
 	}
 }
 
+// called by receiver side
 void send_eof_pck(rel_t*r, struct packet_node* pkt_ptr,
 		struct timeval* current_time) {
 	packet_t * packet = pkt_ptr->packet;
@@ -892,9 +902,7 @@ int is_sending_window_full(rel_t* r) {
  * Check if the congestion window is full
  */
 int is_congestion_window_full(rel_t* r) {
-	return r->sending_window->seqno_last_packet_sent
-			- r->sending_window->seqno_last_packet_acked
-			>= (uint32_t) r->congestion_window;
+	return r->num_packets_sent_in_session >= (uint32_t) r->congestion_window;
 }
 
 int is_EOF_pkt(packet_t* pkt) {
