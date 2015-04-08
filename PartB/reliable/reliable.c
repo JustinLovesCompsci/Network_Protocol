@@ -172,7 +172,7 @@ rel_create(conn_t *c, const struct sockaddr_storage *ss,
 	r->all_pkts_acked = 0;
 //	if (debug)  printf("config window size: %d\n", r->config.window);
 //	if (debug)  printf("timeout value: %d\n", r->config.timeout);
-	r->config.timeout = 400;
+	r->config.timeout = 100;
 	start_time = get_current_time();
 	return r;
 }
