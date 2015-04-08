@@ -524,7 +524,6 @@ int is_retransmitting(rel_t* r) {
 }
 
 int is_duplicate_ACK(rel_t* r, packet_t* pkt) {
-	printf("Enter is_duplicate_ACK\n");
 	return r->sending_window->seqno_last_packet_acked + 1 == pkt->ackno;
 }
 
@@ -910,7 +909,6 @@ int is_ACK_pkt(packet_t * pkt) {
 }
 
 int is_new_ACK(uint32_t ackno, rel_t* r) {
-	printf("Enter is_new_ACK\n");
 	printf("ack ackno: %d, expecting: %d\n", ackno,
 			r->sending_window->seqno_last_packet_acked + 1);
 	return ackno > r->sending_window->seqno_last_packet_acked;
