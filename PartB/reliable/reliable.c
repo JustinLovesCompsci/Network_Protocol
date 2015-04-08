@@ -417,6 +417,7 @@ void rel_output(rel_t *r) {
 void rel_timer() {
 //	printf("In rel_timer\n");
 	rel_t* cur_rel = rel_list;
+	return;
 
 	while (cur_rel) {
 		struct packet_node* node = get_first_unacked_pck(cur_rel);
