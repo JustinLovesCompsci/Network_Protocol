@@ -57,13 +57,11 @@ struct reliable_state {
 	conn_t *c; /* This is the connection object */
 
 	/* Add your own data fields below this */
-	int ssthresh; // ssh threshold
-	float congestion_window; // different from receiver_window_size; find the min of two
+	int ssthresh;
+	float congestion_window;
 	int num_duplicated_ack_received;
 	int num_packets_sent_in_session; /* number of packets that have been sent in the current session (RTT) */
-
-	/* For receiver */
-	int has_sent_EOF_packet;
+	int has_sent_EOF_packet; /* For receiver */
 
 	/* below same as 3a */
 	struct config_common config;
@@ -128,6 +126,7 @@ int get_millisec(struct timeval*);
 rel_t *rel_list;
 struct timeval* start_time;
 struct timeval* end_time;
+int num_pkts_sent = 0;
 
 /* Creates a new reliable protocol session, returns NULL on failure.
  * Exactly one of c and ss should be NULL.  (ss is NULL when called
@@ -195,7 +194,8 @@ void rel_destroy(rel_t *r) {
 	free(r);
 	end_time = get_current_time();
 	int diff = get_millisec(end_time) - get_millisec(start_time);
-	printf("Time taken to transfer the file: %d\n", diff);
+	printf("Transferring the file takes %d milliseconds and %d packets sent\n",
+			diff, num_pkts_sent);
 	free(start_time);
 	free(end_time);
 }
@@ -321,7 +321,7 @@ void rel_read(rel_t *relState) {
 							is_congestion_window_full(relState),
 							relState->read_EOF_from_input);
 				}
-				try_end_connection(relState);
+				if (relState->read_EOF_from_input) try_end_connection(relState);
 				return;
 			}
 			packet_t *packet = (packet_t*) malloc(sizeof(packet_t));
@@ -442,10 +442,8 @@ void rel_timer() {
 	rel_t* cur_rel = rel_list;
 
 	while (cur_rel) {
-		// receiver send initial eof
-
 		if (cur_rel->has_sent_EOF_packet
-				== 0&& cur_rel->c->sender_receiver == RECEIVER) {
+				== 0&& cur_rel->c->sender_receiver == RECEIVER) { /* receiver send initial EOF */
 			send_initial_eof(cur_rel);
 			return;
 		}
@@ -845,6 +843,7 @@ void send_ack_pck(rel_t* r, int ack_num) {
 	convert_to_network_order(ack_pck);
 	ack_pck->cksum = get_check_sum(ack_pck, SIZE_ACK_PACKET);
 	conn_sendpkt(r->c, ack_pck, SIZE_ACK_PACKET);
+	num_pkts_sent++;
 	free(ack_pck);
 	if (debug) {
 		printf("Ack packet sent\n");
@@ -865,6 +864,7 @@ void send_data_pck(rel_t*r, struct packet_node* pkt_ptr,
 	if (debug)
 		printf("sending packet with seqno: %d\n", ntohl(packet->seqno));
 	conn_sendpkt(r->c, packet, pckLen);
+	num_pkts_sent++;
 	pkt_ptr->time_sent = current_time;
 	r->num_packets_sent_in_session = r->num_packets_sent_in_session + 1;
 
