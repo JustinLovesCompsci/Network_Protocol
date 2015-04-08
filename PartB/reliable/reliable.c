@@ -564,7 +564,6 @@ int send_retransmit_pkts(rel_t* r) {
 
 			send_data_pck(r, r->sending_window->pkt_to_retransmit_start,
 					get_current_time());
-			r->num_packets_sent_in_session += 1;
 
 			/* check if retransmission is finished*/
 			if (r->sending_window->pkt_to_retransmit_start
@@ -817,9 +816,7 @@ void send_data_pck(rel_t*r, struct packet_node* pkt_ptr,
 	printf("sending packet with seqno: %d\n", ntohl(packet->seqno));
 	conn_sendpkt(r->c, packet, pckLen);
 	pkt_ptr->time_sent = current_time;
-
 	r->num_packets_sent_in_session = r->num_packets_sent_in_session + 1;
-	/*sender responsible for increment, receiver responsible for clearing*/
 
 	convert_to_host_order(packet);
 	if (debug) {
