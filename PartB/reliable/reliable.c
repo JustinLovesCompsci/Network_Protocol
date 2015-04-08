@@ -171,7 +171,7 @@ rel_create(conn_t *c, const struct sockaddr_storage *ss,
 	r->read_EOF_from_sender = 0;
 	r->output_all_data = 0;
 	r->all_pkts_acked = 0;
-	r->config.timeout = 400;
+	if (r->config.timeout == 0) r->config.timeout = 400;
 	start_time = get_current_time();
 	return r;
 }
