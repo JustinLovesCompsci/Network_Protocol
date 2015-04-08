@@ -167,22 +167,22 @@ rel_create(conn_t *c, const struct sockaddr_storage *ss,
 	r->read_EOF_from_sender = 0;
 	r->output_all_data = 0;
 	r->all_pkts_acked = 0;
-
+	printf("config window size: %d\n", r->config.window);
 	return r;
 }
 
 void rel_destroy(rel_t *r) {
 //	conn_destroy(r->c);
-	printf("In rel_destroy\n");
+//	printf("In rel_destroy\n");
 
 	/* Free any other allocated memory here */
-	if (debug)
-		printf("IN rel_destroy\n");
-
-	if (r->next) {
-		r->next->prev = r->prev;
-	}
-	*r->prev = r->next;
+//	if (debug)
+//		printf("IN rel_destroy\n");
+//
+//	if (r->next) {
+//		r->next->prev = r->prev;
+//	}
+//	*r->prev = r->next;
 	conn_destroy(r->c);
 
 	free(r);
@@ -216,6 +216,7 @@ void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
 			r->num_duplicated_ack_received++;
 
 			if (r->num_duplicated_ack_received >= 3) { /* triple duplication */
+				printf("triply duplicated ack\n");
 				prepare_congestion_avoidance(r);
 				/* set fast retransmission pointers */
 				r->sending_window->pkt_to_retransmit_start =
@@ -238,8 +239,8 @@ void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
 			printf("Received an old but not duplicated ACK\n");
 		}
 	} else { /* data (including EOF) packet */
-		printf("Received a Data packet\n");
-		process_received_ack_pkt(r, pkt);
+//		printf("Received a Data packet\n");
+//		process_received_ack_pkt(r, pkt);
 		process_received_data_pkt(r, pkt);
 	}
 }
@@ -287,21 +288,21 @@ void rel_read(rel_t *relState) {
 			send_initial_eof(relState);
 		}
 	} else /* sender mode */
-	{
+	{	printf("in sender mode in rel_read\n");
 		for (;;) {
 			if (is_sending_window_full(relState)
 					|| is_congestion_window_full(relState)
 					|| is_retransmitting(relState)
 					|| relState->read_EOF_from_input) {
-				if (debug) {
+//				if (debug) {
 					printf(
-							"Abort generating packet->"
-									"is retransmitting %d, sending window full %d, congestion window full %d "
-									"or have already read EOF before from input\n",
-							is_retransmitting(relState),
-							is_sending_window_full(relState),
-							is_congestion_window_full(relState));
-				}
+							"Abort generating packet: is retransmitting, or sending window full, "
+									"or congestion window full or have already read EOF before from input\n");
+					printf("is retransmitting: %d, sending window full: %d, congestion window full: %d, "
+							"read EOF before from input: %d\n", is_retransmitting(relState), is_sending_window_full(relState),
+							is_congestion_window_full(relState), relState->read_EOF_from_input);
+//				}
+
 				return;
 			}
 
@@ -312,20 +313,21 @@ void rel_read(rel_t *relState) {
 			relState->read_EOF_from_input = 0;
 			if (bytesRead == 0) { /* no data is read from conn_input */
 				free(packet);
-				if (debug) {
+//				if (debug) {
 					printf("no data is available at input now\n");
-				}
+//				}
 				return;
 			}
 
 			if (bytesRead == -1) { /* read EOF from conn_input */
-				if (debug)
+//				if (debug)
 					printf("read EOF from input\n");
 				relState->read_EOF_from_input = 1;
 				packet->len = (uint16_t) SIZE_EOF_PACKET;
 
 			} else { /* read some data from conn_input */
 				packet->len = (uint16_t) (SIZE_DATA_PCK_HEADER + bytesRead);
+				printf("the data got from input: %s\n", packet->data);
 			}
 
 			packet->ackno =
@@ -553,7 +555,8 @@ int is_duplicate_ACK(rel_t* r, packet_t* pkt) {
  */
 int send_retransmit_pkts(rel_t* r) {
 	while (is_retransmitting(r)) {
-//		printf("Start/continue retransmitting packets\n");
+		printf("Start/continue retransmitting packets\n");
+		printf("window available to retransmit: %d\n", is_window_available_to_send_one(r));
 		if (is_window_available_to_send_one(r)) {
 
 			send_data_pck(r, r->sending_window->pkt_to_retransmit_start,
@@ -611,6 +614,7 @@ void process_received_ack_pkt(rel_t *r, packet_t *pkt) {
 		r->sending_window->seqno_last_packet_acked = pkt->ackno - 1;
 		r->sending_window->receiver_window_size = pkt->rwnd;
 		if (!is_sending_window_full(r) && !is_congestion_window_full(r)) {
+			printf("get more data to send\n");
 			rel_read(r);
 		}
 	}
@@ -786,6 +790,7 @@ void send_ack_pck(rel_t* r, int ack_num) {
 	ack_pck->ackno = ack_num;
 	ack_pck->len = SIZE_ACK_PACKET;
 	ack_pck->rwnd = r->config.window; //TODO: check if this field is the receiver window fixed size
+	printf("ack_pack rwnd: %d\n", ack_pck->rwnd);
 	convert_to_network_order(ack_pck);
 	ack_pck->cksum = get_check_sum(ack_pck, SIZE_ACK_PACKET);
 	conn_sendpkt(r->c, ack_pck, SIZE_ACK_PACKET);
@@ -806,6 +811,7 @@ void send_data_pck(rel_t*r, struct packet_node* pkt_ptr,
 	convert_to_network_order(packet);
 	packet->cksum = get_check_sum(packet, pckLen);
 	assert(packet->cksum != 0);
+	printf("sending packet with seqno: %d\n", ntohl(packet->seqno));
 	conn_sendpkt(r->c, packet, pckLen);
 	pkt_ptr->time_sent = current_time;
 
@@ -909,6 +915,14 @@ int try_end_connection(rel_t* r) {
  * Check if the sending window is full
  */
 int is_sending_window_full(rel_t* r) {
+	printf("last packet sent: %d, last packet acked: %d, config window size: %d, receiver window size: %d\n",
+			r->sending_window->seqno_last_packet_sent,
+			r->sending_window->seqno_last_packet_acked,
+			r->config.window,
+			r->sending_window->receiver_window_size);
+	printf("is sending window full: %d\n", r->sending_window->seqno_last_packet_sent
+			- r->sending_window->seqno_last_packet_acked
+			>= min(r->config.window, r->sending_window->receiver_window_size));
 	return r->sending_window->seqno_last_packet_sent
 			- r->sending_window->seqno_last_packet_acked
 			>= min(r->config.window, r->sending_window->receiver_window_size);
@@ -918,7 +932,16 @@ int is_sending_window_full(rel_t* r) {
  * Check if the congestion window is full
  */
 int is_congestion_window_full(rel_t* r) {
-	return r->num_packets_sent_in_session >= (uint32_t) r->congestion_window;
+	printf("last packet sent: %d, last packet acked: %d, congestion window size: %d\n",
+			r->sending_window->seqno_last_packet_sent,
+			r->sending_window->seqno_last_packet_acked,
+			r->congestion_window);
+	printf("is congestion window full: %d\n", r->sending_window->seqno_last_packet_sent
+			- r->sending_window->seqno_last_packet_acked
+			>= r->congestion_window);
+	return r->sending_window->seqno_last_packet_sent
+			- r->sending_window->seqno_last_packet_acked
+			>= r->congestion_window;
 }
 
 int is_EOF_pkt(packet_t* pkt) {
