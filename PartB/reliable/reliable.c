@@ -209,6 +209,7 @@ void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
 		printf("Received an ACK packet with ackno %d\n", pkt->ackno);
 
 		if (is_duplicate_ACK(r, pkt)) { /* duplicated ACK */
+
 			printf("Received a duplicated ACK with ackno %d\n", pkt->ackno);
 			r->num_duplicated_ack_received++;
 
@@ -278,7 +279,7 @@ void rel_read(rel_t *relState) {
 
 	if (relState->c->sender_receiver == RECEIVER) {
 		if (relState->has_sent_EOF_packet == 1) {
-			return;
+			return; // waiting for packet
 		} else {
 			send_initial_eof(relState);
 		}
@@ -692,7 +693,7 @@ void append_node_to_last_received(rel_t *r, struct packet_node* node) {
 	node->next = NULL;
 }
 
-struct sliding_window_send * init_sending_window() {
+struct sliding_window_send * init_sending_window(rel_t* relState) {
 	struct sliding_window_send * window = (struct sliding_window_send *) malloc(
 			sizeof(struct sliding_window_send));
 	window->seqno_last_packet_acked = 0;
