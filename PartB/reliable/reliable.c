@@ -320,7 +320,7 @@ void rel_read(rel_t *relState) {
 							is_congestion_window_full(relState),
 							relState->read_EOF_from_input);
 				}
-				try_end_connection(relState);
+				if (relState->read_EOF_from_input) try_end_connection(relState);
 				return;
 			}
 			packet_t *packet = (packet_t*) malloc(sizeof(packet_t));
