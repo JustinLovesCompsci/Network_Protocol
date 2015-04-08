@@ -209,9 +209,7 @@ void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
 		printf("Received an ACK packet with ackno %d\n", pkt->ackno);
 
 		if (is_duplicate_ACK(r, pkt)) { /* duplicated ACK */
-			assert(
-					get_first_unacked_pck(r)->packet->seqno
-							== r->sending_window->seqno_last_packet_acked + 1);
+			assert(get_first_unacked_pck(r)->packet->seqno == r->sending_window->seqno_last_packet_acked + 1);
 			printf("Received a duplicated ACK with ackno %d\n", pkt->ackno);
 			r->num_duplicated_ack_received++;
 
