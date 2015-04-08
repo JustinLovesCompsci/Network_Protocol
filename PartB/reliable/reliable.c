@@ -194,7 +194,7 @@ void rel_destroy(rel_t *r) {
 	free(r);
 	end_time = get_current_time();
 	int diff = get_millisec(end_time) - get_millisec(start_time);
-	printf("Time taken to transfer the file: %d", diff);
+	printf("Time taken to transfer the file: %d\n", diff);
 	free(start_time);
 	free(end_time);
 }
@@ -439,7 +439,8 @@ void rel_timer() {
 	while (cur_rel) {
 		// receiver send initial eof
 
-		if (cur_rel->has_sent_EOF_packet == 0 && cur_rel->c->sender_receiver == RECEIVER) {
+		if (cur_rel->has_sent_EOF_packet
+				== 0&& cur_rel->c->sender_receiver == RECEIVER) {
 			send_initial_eof(cur_rel);
 			return;
 		}
@@ -934,7 +935,7 @@ uint16_t get_check_sum(packet_t *packet, int packetLength) {
  * Else return 0
  */
 int try_end_connection(rel_t* r) {
-	if(r->c->sender_receiver == SENDER){
+	if (r->c->sender_receiver == SENDER) {
 //		printf("--> try end connection: all pkts acked %d , readEOF_from input %d, output all data %d\n",
 //				r->all_pkts_acked, r->read_EOF_from_input, r->output_all_data);
 
@@ -943,7 +944,7 @@ int try_end_connection(rel_t* r) {
 			return 1;
 		}
 		return 0;
-	}else{ // receiver
+	} else { // receiver
 		if (r->read_EOF_from_sender) {
 
 			rel_destroy(r);
