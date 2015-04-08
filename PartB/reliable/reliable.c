@@ -751,6 +751,7 @@ void send_ack_pck(rel_t* r, int ack_num) {
 	ack_pck->ackno = ack_num;
 	ack_pck->len = SIZE_ACK_PACKET;
 	ack_pck->rwnd = get_current_buffer_size(r);
+	printf("ack_pack rwnd: %d\n", ack_pck->rwnd);
 	convert_to_network_order(ack_pck);
 	ack_pck->cksum = get_check_sum(ack_pck, SIZE_ACK_PACKET);
 	conn_sendpkt(r->c, ack_pck, SIZE_ACK_PACKET);
@@ -770,6 +771,7 @@ void send_data_pck(rel_t*r, struct packet_node* pkt_ptr,
 	convert_to_network_order(packet);
 	packet->cksum = get_check_sum(packet, pckLen);
 	assert(packet->cksum != 0);
+	printf("sending packet with seqno: %d\n", ntohl(packet->seqno));
 	conn_sendpkt(r->c, packet, pckLen);
 	pkt_ptr->time_sent = current_time;
 	convert_to_host_order(packet);
