@@ -606,6 +606,8 @@ void prepare_congestion_avoidance(rel_t* r) {
 		r->ssthresh = 1;
 	}
 	r->congestion_window = r->ssthresh;
+	printf("Preparing congestion avoidance: congestion window = ssthresh = %f ", r->congestion_window);
+
 	assert(r->congestion_window != 0);
 	r->num_packets_sent_in_session = 0;
 }
