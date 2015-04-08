@@ -319,12 +319,11 @@ void process_received_ack_pkt(rel_t *r, packet_t *pkt) {
 	/* update last packet acked pointer in sending window if new ack arrives */
 	if (is_new_ACK(pkt->ackno, r)) {
 		r->sending_window->seqno_last_packet_acked = pkt->ackno - 1;
+		check_all_sent_pkts_acked(r);
 		if (!is_sending_window_full(r)) {
 			rel_read(r);
 		}
 	}
-
-	check_all_sent_pkts_acked(r);
 }
 
 /* called by receiver
