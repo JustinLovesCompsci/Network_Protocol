@@ -592,7 +592,10 @@ int is_window_available_to_send_one(rel_t *r) {
 }
 
 void prepare_slow_start(rel_t* r) {
-	r->ssthresh = r->congestion_window / 2;
+	r->ssthresh = (int) r->congestion_window / 2;
+	if (r->ssthresh <= 0) {
+		r->ssthresh = 1;
+	}
 	r->congestion_window = 1;
 	r->num_packets_sent_in_session = 0;
 }
