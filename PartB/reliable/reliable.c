@@ -209,7 +209,7 @@ void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
 		printf("Received an ACK packet with ackno %d\n", pkt->ackno);
 
 		if (is_duplicate_ACK(r, pkt)) { /* duplicated ACK */
-			assert(get_first_unacked_pck(r)->packet->seqno == r->sending_window->seqno_last_packet_acked + 1);
+
 			printf("Received a duplicated ACK with ackno %d\n", pkt->ackno);
 			r->num_duplicated_ack_received++;
 
@@ -233,8 +233,9 @@ void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
 			increase_congestion_window_by_mode(r);
 			process_received_ack_pkt(r, pkt);
 		}
-
+		printf("Received an old but not duplicated ACK\n");
 	} else { /* data (including EOF) packet */
+		printf("Received a Data packet\n");
 		process_received_ack_pkt(r, pkt);
 		process_received_data_pkt(r, pkt);
 	}
@@ -291,7 +292,7 @@ void rel_read(rel_t *relState) {
 					|| relState->read_EOF_from_input) {
 				if (debug) {
 					printf(
-							"abort generating packet: is retransmitting, or sending window full, "
+							"Abort generating packet: is retransmitting, or sending window full, "
 									"or congestion window full or have already read EOF before from input\n");
 				}
 				return;
@@ -524,6 +525,7 @@ int is_retransmitting(rel_t* r) {
 }
 
 int is_duplicate_ACK(rel_t* r, packet_t* pkt) {
+	printf("Enter is_duplicate_ACK\n");
 	return r->sending_window->seqno_last_packet_acked + 1 == pkt->ackno;
 }
 
@@ -896,7 +898,6 @@ int is_congestion_window_full(rel_t* r) {
 }
 
 int is_EOF_pkt(packet_t* pkt) {
-//	return pkt->len == SIZE_EOF_PACKETs && strlen(pkt->data) == 0;
 	//TODO: check more than length
 	return pkt->len == SIZE_EOF_PACKET;
 }
@@ -910,6 +911,7 @@ int is_ACK_pkt(packet_t * pkt) {
 }
 
 int is_new_ACK(uint32_t ackno, rel_t* r) {
+	printf("Enter is_new_ACK\n");
 	printf("ack ackno: %d, expecting: %d\n", ackno,
 			r->sending_window->seqno_last_packet_acked + 1);
 	return ackno > r->sending_window->seqno_last_packet_acked;
