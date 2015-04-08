@@ -209,6 +209,9 @@ void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
 		printf("Received an ACK packet with ackno %d\n", pkt->ackno);
 
 		if (is_duplicate_ACK(r, pkt)) { /* duplicated ACK */
+			assert(
+					get_first_unacked_pck(r)->packet->seqno
+							== r->sending_window->seqno_last_packet_acked + 1);
 			printf("Received a duplicated ACK with ackno %d\n", pkt->ackno);
 			r->num_duplicated_ack_received++;
 
@@ -220,21 +223,19 @@ void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
 				if (r->sending_window->pkt_to_retransmit_start == NULL) {
 					return; /* nothing to retransmit */
 				}
-				//			assert(r->sending_window->pkt_to_retransmit_start != NULL);
-				assert(
-						get_first_unacked_pck(r)->packet->seqno
-								== r->sending_window->seqno_last_packet_acked
-										+ 1);
 				r->sending_window->pkt_to_retransmit_end =
 						r->sending_window->last_packet_sent;
+
 			} else { /* duplicated ACK but not triple duplication yet */
 				increase_congestion_window_by_mode(r);
 			}
+
 		} else if (is_new_ACK(pkt->ackno, r)) { /* new ACK packet */
 			r->num_duplicated_ack_received = 1;
 			increase_congestion_window_by_mode(r);
 			process_received_ack_pkt(r, pkt);
 		}
+
 	} else { /* data (including EOF) packet */
 		process_received_ack_pkt(r, pkt);
 		process_received_data_pkt(r, pkt);
