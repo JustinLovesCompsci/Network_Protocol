@@ -120,6 +120,7 @@ void send_initial_eof(rel_t*);
 int is_duplicate_ACK(rel_t*, packet_t*);
 void prepare_congestion_avoidance(rel_t*);
 void increase_congestion_window_by_mode(rel_t*);
+int get_num_retransmit_pkts(rel_t*);
 
 rel_t *rel_list;
 
@@ -223,13 +224,16 @@ void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
 				}
 				r->sending_window->pkt_to_retransmit_end =
 						r->sending_window->last_packet_sent;
+				r->num_packets_sent_in_session -= get_num_retransmit_pkts(r);
 
 			} else { /* duplicated ACK but not triple duplication yet */
+				r->num_packets_sent_in_session = 0;
 				increase_congestion_window_by_mode(r);
 			}
 
 		} else if (is_new_ACK(pkt->ackno, r)) { /* new ACK packet */
 			r->num_duplicated_ack_received = 1;
+			r->num_packets_sent_in_session = 0;
 			increase_congestion_window_by_mode(r);
 			process_received_ack_pkt(r, pkt);
 		}
@@ -416,38 +420,43 @@ void rel_timer() {
 	rel_t* cur_rel = rel_list;
 
 	while (cur_rel) {
-		if (send_retransmit_pkts(cur_rel)) {
-			struct packet_node* node = get_first_unacked_pck(cur_rel);
+		struct packet_node* node = get_first_unacked_pck(cur_rel);
 
-			while (node) {
-				struct timeval* current_time = get_current_time();
-				struct timeval* diff = (struct timeval*) malloc(
-						sizeof(struct timeval));
-				timersub(current_time, node->time_sent, diff);
-				//printf("diff is %d:%d\n", diff->tv_sec, diff->tv_usec);
+		while (node) {
+			struct timeval* current_time = get_current_time();
+			struct timeval* diff = (struct timeval*) malloc(
+					sizeof(struct timeval));
+			timersub(current_time, node->time_sent, diff);
+			//printf("diff is %d:%d\n", diff->tv_sec, diff->tv_usec);
 
-				if (is_greater_than(diff, cur_rel->config.timeout)) { /* Retransmit because exceeds timeout */
-					free(current_time);
-					free(diff);
+			if (is_greater_than(diff, cur_rel->config.timeout)) { /* Retransmit because exceeds timeout */
+				free(current_time);
+				free(diff);
 
-					if (debug) {
-						printf("Found timeout packet and start to retransmit:");
-						print_pkt(node->packet, "packet", node->packet->len);
-					}
-					cur_rel->sending_window->pkt_to_retransmit_start = node;
-					cur_rel->sending_window->pkt_to_retransmit_end =
-							cur_rel->sending_window->last_packet_sent;
-					break;
+				if (debug) {
+					printf("Found timeout packet and start to retransmit:");
+					print_pkt(node->packet, "packet", node->packet->len);
 				}
-				node = node->next;
-			}
-
-			if (is_retransmitting(cur_rel)) {
+				cur_rel->sending_window->pkt_to_retransmit_start = node;
+				cur_rel->sending_window->pkt_to_retransmit_end =
+						cur_rel->sending_window->last_packet_sent;
+				cur_rel->num_packets_sent_in_session -= get_num_retransmit_pkts(
+						cur_rel);
+				assert(is_retransmitting(cur_rel));
 				prepare_slow_start(cur_rel);
+				break;
 			}
+			node = node->next;
 		}
+
+		send_retransmit_pkts(cur_rel);
 		cur_rel = rel_list->next;
 	}
+}
+
+int get_num_retransmit_pkts(rel_t* r) {
+	return r->sending_window->pkt_to_retransmit_end
+			- r->sending_window->pkt_to_retransmit_start + 1;
 }
 
 ////////////////////////////////////////////////////////////////////////
@@ -529,7 +538,6 @@ int is_retransmitting(rel_t* r) {
 }
 
 int is_duplicate_ACK(rel_t* r, packet_t* pkt) {
-	printf("Enter is_duplicate_ACK\n");
 	return r->sending_window->seqno_last_packet_acked + 1 == pkt->ackno;
 }
 
@@ -906,7 +914,7 @@ int is_congestion_window_full(rel_t* r) {
 }
 
 int is_EOF_pkt(packet_t* pkt) {
-	//TODO: check more than length
+//TODO: check more than length
 	return pkt->len == SIZE_EOF_PACKET;
 }
 
@@ -914,12 +922,11 @@ int is_EOF_pkt(packet_t* pkt) {
  * Check if a given packet is an ACK packet
  */
 int is_ACK_pkt(packet_t * pkt) {
-	//TODO: check more than length
+//TODO: check more than length
 	return pkt->len == SIZE_ACK_PACKET;
 }
 
 int is_new_ACK(uint32_t ackno, rel_t* r) {
-	printf("Enter is_new_ACK\n");
 	printf("ack ackno: %d, expecting: %d\n", ackno,
 			r->sending_window->seqno_last_packet_acked + 1);
 	return ackno > r->sending_window->seqno_last_packet_acked;
