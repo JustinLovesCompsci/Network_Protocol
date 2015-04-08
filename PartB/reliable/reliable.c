@@ -118,6 +118,8 @@ int is_congestion_window_full(rel_t*);
 int is_retransmitting(rel_t*);
 void send_initial_eof(rel_t*);
 int is_duplicate_ACK(rel_t*, packet_t*);
+void prepare_congestion_avoidance(rel_t*);
+void increase_congestion_window_by_mode(rel_t*);
 
 rel_t *rel_list;
 
@@ -190,8 +192,7 @@ void rel_demux(const struct config_common *cc,
 }
 
 void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
-	/* Check if packet is corrupted */
-	if (is_pkt_corrupted(pkt, n)) {
+	if (is_pkt_corrupted(pkt, n)) { /* Check if packet is corrupted */
 		if (debug)
 			printf("Received a corrupted packet. \n");
 		return;
@@ -204,46 +205,51 @@ void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
 		print_pkt(pkt, "packet", (int) pkt->len);
 	}
 
-	if (is_ACK_pkt(pkt)) { /* ack packet */
-		printf("This is an ACK packet\n");
-//		assert(r->c->sender_receiver == SENDER);
+	if (is_ACK_pkt(pkt)) { /* Received an ACK packet, called by either sender or receiver (initial EOF) */
+		printf("Received an ACK packet with ackno %d\n", pkt->ackno);
 
-		if (is_duplicate_ACK(r, pkt)) { // duplicated ack
-			r->num_duplicated_ack_received++;
-		} else if (is_new_ACK(pkt->ackno, r)) { // new ack packet
-			r->num_duplicated_ack_received = 1;
-			r->sending_window->seqno_last_packet_acked = pkt->ackno - 1;
-		} else { // old ack
-			return;
-		}
-
-		if (r->num_duplicated_ack_received >= 3) { /* triply duplicated ack */
-			r->ssthresh = (int) r->congestion_window / 2;
-			r->congestion_window = r->ssthresh;
-			/* set fast retransmission pointers */
-			r->sending_window->pkt_to_retransmit_start = get_first_unacked_pck(
-					r);
-			if (r->sending_window->pkt_to_retransmit_start == NULL) {
-				return;
-			}
-//			assert(r->sending_window->pkt_to_retransmit_start != NULL);
+		if (is_duplicate_ACK(r, pkt)) { /* duplicated ACK */
 			assert(
 					get_first_unacked_pck(r)->packet->seqno
 							== r->sending_window->seqno_last_packet_acked + 1);
-			r->sending_window->pkt_to_retransmit_end =
-					r->sending_window->last_packet_sent;
-		} else { /* normal ack */
-			if (r->congestion_window < r->ssthresh) { /* slow start */
-				r->congestion_window++;
-			} else {
-				r->congestion_window += 1 / (r->congestion_window); /* congestion avoidance */
+			printf("Received a duplicated ACK with ackno %d\n", pkt->ackno);
+			r->num_duplicated_ack_received++;
+
+			if (r->num_duplicated_ack_received >= 3) { /* triple duplication */
+				prepare_congestion_avoidance(r);
+				/* set fast retransmission pointers */
+				r->sending_window->pkt_to_retransmit_start =
+						get_first_unacked_pck(r);
+				if (r->sending_window->pkt_to_retransmit_start == NULL) {
+					return; /* nothing to retransmit */
+				}
+				r->sending_window->pkt_to_retransmit_end =
+						r->sending_window->last_packet_sent;
+
+			} else { /* duplicated ACK but not triple duplication yet */
+				increase_congestion_window_by_mode(r);
 			}
+
+		} else if (is_new_ACK(pkt->ackno, r)) { /* new ACK packet */
+			r->num_duplicated_ack_received = 1;
+			increase_congestion_window_by_mode(r);
 			process_received_ack_pkt(r, pkt);
 		}
 
-	} else { /* data (including eof) packet */
+	} else { /* data (including EOF) packet */
 		process_received_ack_pkt(r, pkt);
 		process_received_data_pkt(r, pkt);
+	}
+}
+
+/**
+ * called after receive an ACK without triple duplication
+ */
+void increase_congestion_window_by_mode(rel_t* r) {
+	if (r->congestion_window < r->ssthresh) { /* in slow start */
+		r->congestion_window++;
+	} else {
+		r->congestion_window += 1 / (r->congestion_window); /* in congestion avoidance */
 	}
 }
 
@@ -569,6 +575,11 @@ void prepare_slow_start(rel_t* r) {
 	r->congestion_window = 1;
 }
 
+void prepare_congestion_avoidance(rel_t* r) {
+	r->ssthresh = (int) r->congestion_window / 2;
+	r->congestion_window = r->ssthresh;
+}
+
 void process_received_ack_pkt(rel_t *r, packet_t *pkt) {
 	if (debug) {
 		printf("Process packet for ACK\n");
@@ -576,7 +587,7 @@ void process_received_ack_pkt(rel_t *r, packet_t *pkt) {
 
 	/* update last packet acked pointer in sending window if new ack arrives */
 	if (is_new_ACK(pkt->ackno, r)) {
-		printf("It's a new ack\n");
+		printf("Received a new ACK with ackno %d\n", pkt->ackno);
 		r->sending_window->seqno_last_packet_acked = pkt->ackno - 1;
 		r->sending_window->receiver_window_size = pkt->rwnd;
 		if (!is_sending_window_full(r) && !is_congestion_window_full(r)) {
