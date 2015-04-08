@@ -122,8 +122,11 @@ void prepare_congestion_avoidance(rel_t*);
 void increase_congestion_window_by_mode(rel_t*);
 int get_num_retransmit_pkts(rel_t*);
 void reset_retransmission_field(rel_t*);
+int get_millisec(struct timeval*);
 
 rel_t *rel_list;
+struct timeval* start_time;
+struct timeval* end_time;
 
 /* Creates a new reliable protocol session, returns NULL on failure.
  * Exactly one of c and ss should be NULL.  (ss is NULL when called
@@ -170,6 +173,7 @@ rel_create(conn_t *c, const struct sockaddr_storage *ss,
 //	printf("config window size: %d\n", r->config.window);
 //	printf("timeout value: %d\n", r->config.timeout);
 	r->config.timeout = 400;
+	start_time = get_current_time();
 	return r;
 }
 
@@ -188,6 +192,11 @@ void rel_destroy(rel_t *r) {
 	conn_destroy(r->c);
 
 	free(r);
+	end_time = get_current_time();
+	int diff = get_millisec(end_time) - get_millisec(start_time);
+	printf("Time taken to transfer the file: %d", diff);
+	free(start_time);
+	free(end_time);
 }
 
 void rel_demux(const struct config_common *cc,
@@ -296,9 +305,13 @@ void rel_read(rel_t *relState) {
 					|| is_retransmitting(relState)
 					|| relState->read_EOF_from_input) {
 				if (debug) {
-					printf("Abort generating packet-> is retransmitting: %d, sending window full: %d, congestion window full: %d, "
-							"read EOF before from input: %d\n", is_retransmitting(relState), is_sending_window_full(relState),
-							is_congestion_window_full(relState), relState->read_EOF_from_input);
+					printf(
+							"Abort generating packet-> is retransmitting: %d, sending window full: %d, congestion window full: %d, "
+									"read EOF before from input: %d\n",
+							is_retransmitting(relState),
+							is_sending_window_full(relState),
+							is_congestion_window_full(relState),
+							relState->read_EOF_from_input);
 				}
 				return;
 			}
@@ -765,8 +778,12 @@ void destory_receiving_window(struct sliding_window_receive* window) {
 
 int is_greater_than(struct timeval* time1, int millisec2) {
 	assert(millisec2 > 0);
-	int millisec1 = time1->tv_sec * 1000 + time1->tv_usec / 1000;
+	int millisec1 = get_millisec(time1);
 	return millisec1 > millisec2;
+}
+
+int get_millisec(struct timeval* time) {
+	return time->tv_sec * 1000 + time->tv_usec / 1000;
 }
 
 /*
