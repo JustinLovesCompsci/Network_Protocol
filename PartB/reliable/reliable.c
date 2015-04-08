@@ -120,6 +120,7 @@ void send_initial_eof(rel_t*);
 int is_duplicate_ACK(rel_t*, packet_t*);
 void prepare_congestion_avoidance(rel_t*);
 void increase_congestion_window_by_mode(rel_t*);
+int get_num_retransmit_pkts(rel_t*);
 
 rel_t *rel_list;
 
@@ -223,6 +224,7 @@ void rel_recvpkt(rel_t *r, packet_t *pkt, size_t n) {
 				}
 				r->sending_window->pkt_to_retransmit_end =
 						r->sending_window->last_packet_sent;
+				r->num_packets_sent_in_session -= get_num_retransmit_pkts(r);
 
 			} else { /* duplicated ACK but not triple duplication yet */
 				increase_congestion_window_by_mode(r);
@@ -433,6 +435,8 @@ void rel_timer() {
 					cur_rel->sending_window->pkt_to_retransmit_start = node;
 					cur_rel->sending_window->pkt_to_retransmit_end =
 							cur_rel->sending_window->last_packet_sent;
+					cur_rel->num_packets_sent_in_session -=
+							get_num_retransmit_pkts(cur_rel);
 					break;
 				}
 				node = node->next;
@@ -444,6 +448,11 @@ void rel_timer() {
 		}
 		cur_rel = rel_list->next;
 	}
+}
+
+int get_num_retransmit_pkts(rel_t* r) {
+	return r->sending_window->pkt_to_retransmit_end
+			- r->sending_window->pkt_to_retransmit_start + 1;
 }
 
 ////////////////////////////////////////////////////////////////////////
@@ -897,7 +906,7 @@ int is_congestion_window_full(rel_t* r) {
 }
 
 int is_EOF_pkt(packet_t* pkt) {
-	//TODO: check more than length
+//TODO: check more than length
 	return pkt->len == SIZE_EOF_PACKET;
 }
 
@@ -905,7 +914,7 @@ int is_EOF_pkt(packet_t* pkt) {
  * Check if a given packet is an ACK packet
  */
 int is_ACK_pkt(packet_t * pkt) {
-	//TODO: check more than length
+//TODO: check more than length
 	return pkt->len == SIZE_ACK_PACKET;
 }
 
