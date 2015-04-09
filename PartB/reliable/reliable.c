@@ -171,29 +171,20 @@ rel_create(conn_t *c, const struct sockaddr_storage *ss,
 	r->read_EOF_from_sender = 0;
 	r->output_all_data = 0;
 	r->all_pkts_acked = 0;
-	if (r->config.timeout == 0) r->config.timeout = 400;
+	if (r->config.timeout == 0)
+		r->config.timeout = 400;
 	start_time = get_current_time();
 	return r;
 }
 
 void rel_destroy(rel_t *r) {
-//	conn_destroy(r->c);
-//	if (debug)  printf("In rel_destroy\n");
-
-	/* Free any other allocated memory here */
-//	if (debug)
-//		printf("IN rel_destroy\n");
-//
-//	if (r->next) {
-//		r->next->prev = r->prev;
-//	}
-//	*r->prev = r->next;
 	conn_destroy(r->c);
 
 	free(r);
 	end_time = get_current_time();
 	int diff = get_millisec(end_time) - get_millisec(start_time);
-	printf("Transferring the file takes %d milliseconds and %d packets sent, %d original packets sent\n",
+	printf(
+			"Transferring the file takes %d milliseconds and %d packets sent, %d original packets sent\n",
 			diff, num_pkts_sent, original_pkts_sent);
 	free(start_time);
 	free(end_time);
@@ -989,7 +980,8 @@ int is_sending_window_full(rel_t* r) {
 //			r->sending_window->receiver_window_size);
 	return r->sending_window->seqno_last_packet_sent
 			- r->sending_window->seqno_last_packet_acked
-			>= min(r->congestion_window, r->sending_window->receiver_window_size);
+			>= min(r->congestion_window,
+					r->sending_window->receiver_window_size);
 //	return r->sending_window->seqno_last_packet_sent
 //			- r->sending_window->seqno_last_packet_acked
 //			>= r->sending_window->receiver_window_size;
