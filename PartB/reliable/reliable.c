@@ -184,7 +184,7 @@ void rel_destroy(rel_t *r) {
 	end_time = get_current_time();
 	int diff = get_millisec(end_time) - get_millisec(start_time);
 	printf(
-			"Transferring the file takes %d milliseconds and %d packets sent, %d original packets sent\n",
+			"Transferring file took %d milliseconds with %d total packets sent and %d original packets sent\n",
 			diff, num_pkts_sent, original_pkts_sent);
 	free(start_time);
 	free(end_time);
